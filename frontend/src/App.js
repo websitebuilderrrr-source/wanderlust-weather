@@ -564,6 +564,15 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
         </div>
       </div>
 
+      {/* AQI Card */}
+      {weatherData.airQuality && (
+        <AQICard darkMode={darkMode} airQuality={weatherData.airQuality} />
+      )}
+
+      {/* Hourly Forecast */}
+        <HourlyForecast darkMode={darkMode} hourlyData={weatherData.hourly} />
+      )}
+        
       <div className={`flex gap-2 overflow-x-auto ${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-2 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
         {[
           { id: 'forecast', label: 'Forecast', icon: Calendar },
@@ -706,3 +715,4 @@ const ActivitiesTab = ({ darkMode, activityScores }) => (
 );
 
 export default App;
+
