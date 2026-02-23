@@ -32,7 +32,7 @@ class WeatherService {
         params: {
           latitude,
           longitude,
-          hourly: 'temperature_2m,precipitation_probability,weathercode,windspeed_10m,relativehumidity_2m',
+          hourly: 'temperature_2m,precipitation_probability,weathercode,windspeed_10m,relativehumidity_2m,apparent_temperature,visibility,pressure_msl',
           daily: 'weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,uv_index_max,sunrise,sunset',
           current_weather: true,
           temperature_unit: 'celsius',
@@ -48,6 +48,75 @@ class WeatherService {
       console.error('Weather fetch error:', error.message);
       throw new Error('Failed to fetch weather data');
     }
+  }
+
+  // Get Air Quality Index
+  async getAirQuality(latitude, longitude) {
+    try {
+      const response = await axios.get('https://air-quality-api.open-meteo.com/v1/air-quality', {
+        params: {
+          latitude,
+          longitude,
+          current: 'us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone',
+          timezone: 'auto'
+        }
+      });
+
+      return this.formatAirQualityData(response.data);
+    } catch (error) {
+      console.error('Air quality fetch error:', error.message);
+      return null; // Return null if AQI not available
+    }
+  }
+
+  // Format Air Quality Data
+  formatAirQualityData(data) {
+    if (!data || !data.current) return null;
+
+    const aqi = data.current.us_aqi || 0;
+    
+    return {
+      aqi: Math.round(aqi),
+      category: this.getAQICategory(aqi),
+      color: this.getAQIColor(aqi),
+      pm25: data.current.pm2_5,
+      pm10: data.current.pm10,
+      co: data.current.carbon_monoxide,
+      no2: data.current.nitrogen_dioxide,
+      so2: data.current.sulphur_dioxide,
+      o3: data.current.ozone,
+      healthRecommendation: this.getAQIHealthAdvice(aqi)
+    };
+  }
+
+  // Get AQI Category
+  getAQICategory(aqi) {
+    if (aqi <= 50) return 'Good';
+    if (aqi <= 100) return 'Moderate';
+    if (aqi <= 150) return 'Unhealthy for Sensitive Groups';
+    if (aqi <= 200) return 'Unhealthy';
+    if (aqi <= 300) return 'Very Unhealthy';
+    return 'Hazardous';
+  }
+
+  // Get AQI Color
+  getAQIColor(aqi) {
+    if (aqi <= 50) return '#00e400'; // Green
+    if (aqi <= 100) return '#ffff00'; // Yellow
+    if (aqi <= 150) return '#ff7e00'; // Orange
+    if (aqi <= 200) return '#ff0000'; // Red
+    if (aqi <= 300) return '#8f3f97'; // Purple
+    return '#7e0023'; // Maroon
+  }
+
+  // Get AQI Health Advice
+  getAQIHealthAdvice(aqi) {
+    if (aqi <= 50) return 'Air quality is satisfactory. Enjoy outdoor activities!';
+    if (aqi <= 100) return 'Air quality is acceptable. Unusually sensitive people should consider limiting prolonged outdoor exertion.';
+    if (aqi <= 150) return 'Sensitive groups should reduce prolonged outdoor exertion.';
+    if (aqi <= 200) return 'Everyone should reduce prolonged outdoor exertion.';
+    if (aqi <= 300) return 'Avoid prolonged outdoor exertion. Everyone should stay indoors.';
+    return 'Health alert! Avoid all outdoor activities.';
   }
 
   // Format weather data
@@ -84,12 +153,16 @@ class WeatherService {
           hour: 'numeric',
           hour12: true 
         }),
+        fullTime: new Date(hourly.time[index]),
         temp: Math.round(hourly.temperature_2m[index]),
+        feelsLike: Math.round(hourly.apparent_temperature?.[index] || hourly.temperature_2m[index]),
         rainChance: hourly.precipitation_probability[index] || 0,
         weatherCode: hourly.weathercode[index],
         condition: this.getWeatherCondition(hourly.weathercode[index]),
         windSpeed: Math.round(hourly.windspeed_10m[index]),
-        humidity: hourly.relativehumidity_2m[index]
+        humidity: hourly.relativehumidity_2m[index],
+        visibility: hourly.visibility?.[index] ? Math.round(hourly.visibility[index] / 1000) : null,
+        pressure: hourly.pressure_msl?.[index] ? Math.round(hourly.pressure_msl[index]) : null
       };
     }).filter(Boolean);
   }
