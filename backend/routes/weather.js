@@ -35,6 +35,12 @@ router.get('/forecast', async (req, res) => {
       parseFloat(lon)
     );
 
+    // Fetch Air Quality Index
+    const airQuality = await weatherService.getAirQuality(
+      parseFloat(lat),
+      parseFloat(lon)
+    );
+
     // Generate climate summary and packing list
     const climateSummary = weatherService.generateClimateSummary(
       city || 'this location',
@@ -79,6 +85,7 @@ router.get('/forecast', async (req, res) => {
 
     res.json({
       ...weatherData,
+      airQuality,
       climateSummary,
       packingList,
       bestTimeWindow,
