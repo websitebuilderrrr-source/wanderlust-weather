@@ -4,86 +4,82 @@ import { Cloud, Sun, CloudRain, Wind, Droplets, Eye, Calendar, MapPin, Heart, Se
 // API Configuration
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Auth Context
+// Auth Context with localStorage
 const AuthContext = createContext();
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      fetchUserProfile();
-    } else {
-      setLoading(false);
+    // Check if user is logged in (stored in localStorage)
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
     }
-  }, [token]);
+    setLoading(false);
 
-  const fetchUserProfile = async () => {
+    // Load Google Sign-In script
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const loginWithGoogle = (credentialResponse) => {
     try {
-      const response = await fetch(`${API_URL}/user/profile`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data);
-      } else {
-        logout();
+      // Decode JWT token from Google
+      const decoded = parseJwt(credentialResponse.credential);
+      
+      const userData = {
+        id: decoded.sub,
+        email: decoded.email,
+        name: decoded.name,
+        picture: decoded.picture,
+        loginMethod: 'google'
+      };
+
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      // Initialize user data in localStorage if not exists
+      if (!localStorage.getItem('favorites')) {
+        localStorage.setItem('favorites', JSON.stringify([]));
+      }
+      if (!localStorage.getItem('trips')) {
+        localStorage.setItem('trips', JSON.stringify([]));
+      }
+      if (!localStorage.getItem('recentSearches')) {
+        localStorage.setItem('recentSearches', JSON.stringify([]));
       }
     } catch (error) {
-      console.error('Profile fetch error:', error);
-    } finally {
-      setLoading(false);
+      console.error('Google login error:', error);
     }
-  };
-
-  const login = async (email, password) => {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Login failed');
-    }
-
-    const data = await response.json();
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem('token', data.token);
-    return data;
-  };
-
-  const register = async (name, email, password) => {
-    const response = await fetch(`${API_URL}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Registration failed');
-    }
-
-    const data = await response.json();
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem('token', data.token);
-    return data;
   };
 
   const logout = () => {
-    setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    // Don't clear favorites/trips on logout - keep user data
+  };
+
+  // Helper to parse JWT
+  const parseJwt = (token) => {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading, refreshProfile: fetchUserProfile }}>
+    <AuthContext.Provider value={{ user, loginWithGoogle, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );
@@ -91,60 +87,97 @@ const AuthProvider = ({ children }) => {
 
 const useAuth = () => useContext(AuthContext);
 
+// LocalStorage helper functions
+const StorageHelper = {
+  getFavorites: () => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return [];
+    const key = `favorites_${user.id}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  },
+  
+  setFavorites: (favorites) => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return;
+    const key = `favorites_${user.id}`;
+    localStorage.setItem(key, JSON.stringify(favorites));
+  },
+  
+  getTrips: () => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return [];
+    const key = `trips_${user.id}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  },
+  
+  setTrips: (trips) => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return;
+    const key = `trips_${user.id}`;
+    localStorage.setItem(key, JSON.stringify(trips));
+  },
+  
+  getRecentSearches: () => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return [];
+    const key = `recentSearches_${user.id}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  },
+  
+  addRecentSearch: (city) => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return;
+    const key = `recentSearches_${user.id}`;
+    let recent = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // Remove if already exists
+    recent = recent.filter(r => r.name !== city.name);
+    
+    // Add to beginning
+    recent.unshift(city);
+    
+    // Keep only last 10
+    if (recent.length > 10) {
+      recent = recent.slice(0, 10);
+    }
+    
+    localStorage.setItem(key, JSON.stringify(recent));
+  }
+};
+
 // Main App Component
 function App() {
   const [darkMode, setDarkMode] = useState(true);
-  const [showAuth, setShowAuth] = useState(false);
 
   return (
     <AuthProvider>
       <div className={`min-h-screen ${darkMode ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900' : 'bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50'}`}>
-        <WeatherApp darkMode={darkMode} setDarkMode={setDarkMode} showAuth={showAuth} setShowAuth={setShowAuth} />
+        <WeatherApp darkMode={darkMode} setDarkMode={setDarkMode} />
       </div>
     </AuthProvider>
   );
 }
 
 // Weather App Component
-const WeatherApp = ({ darkMode, setDarkMode, showAuth, setShowAuth }) => {
+const WeatherApp = ({ darkMode, setDarkMode }) => {
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedCity, setSelectedCity] = useState(null);
   const [weatherData, setWeatherData] = useState(null);
-  const [compareCity, setCompareCity] = useState(null);
-  const [compareData, setCompareData] = useState(null);
   const [favorites, setFavorites] = useState([]);
-  const [trips, setTrips] = useState([]);
-  const [alerts, setAlerts] = useState([]);
+  const [recentSearches, setRecentSearches] = useState([]);
   const [activeTab, setActiveTab] = useState('forecast');
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showTripPlanner, setShowTripPlanner] = useState(false);
-  const [showAlerts, setShowAlerts] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     if (user) {
-      setFavorites(user.favorites || []);
-      setTrips(user.trips || []);
-      loadAlerts();
+      setFavorites(StorageHelper.getFavorites());
+      setRecentSearches(StorageHelper.getRecentSearches());
     }
   }, [user]);
-
-  const loadAlerts = async () => {
-    if (!user) return;
-    try {
-      const response = await fetch(`${API_URL}/alerts/check`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAlerts(data);
-      }
-    } catch (error) {
-      console.error('Alerts error:', error);
-    }
-  };
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -166,11 +199,16 @@ const WeatherApp = ({ darkMode, setDarkMode, showAuth, setShowAuth }) => {
     setSearchResults([]);
     setSearchQuery('');
     
+    // Add to recent searches
+    if (user) {
+      StorageHelper.addRecentSearch(city);
+      setRecentSearches(StorageHelper.getRecentSearches());
+    }
+    
     setLoading(true);
     try {
       const response = await fetch(
-        `${API_URL}/weather/forecast?lat=${city.latitude}&lon=${city.longitude}&city=${encodeURIComponent(city.name)}`,
-        user ? { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } } : {}
+        `${API_URL}/weather/forecast?lat=${city.latitude}&lon=${city.longitude}&city=${encodeURIComponent(city.name)}`
       );
       const data = await response.json();
       setWeatherData(data);
@@ -181,41 +219,30 @@ const WeatherApp = ({ darkMode, setDarkMode, showAuth, setShowAuth }) => {
     }
   };
 
-  const toggleFavorite = async (city) => {
+  const toggleFavorite = (city) => {
     if (!user) {
       setShowAuth(true);
       return;
     }
 
-    try {
-      const existingFav = favorites.find(f => f.name === city.name);
-      
-      if (existingFav) {
-        await fetch(`${API_URL}/user/favorites/${existingFav._id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        setFavorites(favorites.filter(f => f._id !== existingFav._id));
-      } else {
-        const response = await fetch(`${API_URL}/user/favorites`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: city.name,
-            country: city.country,
-            latitude: city.latitude,
-            longitude: city.longitude
-          })
-        });
-        const data = await response.json();
-        setFavorites(data);
-      }
-    } catch (error) {
-      console.error('Favorite error:', error);
+    const currentFavorites = StorageHelper.getFavorites();
+    const existingFav = currentFavorites.find(f => f.name === city.name);
+    
+    let newFavorites;
+    if (existingFav) {
+      newFavorites = currentFavorites.filter(f => f.name !== city.name);
+    } else {
+      newFavorites = [...currentFavorites, {
+        name: city.name,
+        country: city.country,
+        latitude: city.latitude,
+        longitude: city.longitude,
+        addedAt: new Date().toISOString()
+      }];
     }
+    
+    StorageHelper.setFavorites(newFavorites);
+    setFavorites(newFavorites);
   };
 
   const getBestDayLabel = (score) => {
@@ -234,8 +261,6 @@ const WeatherApp = ({ darkMode, setDarkMode, showAuth, setShowAuth }) => {
         setShowAuth={setShowAuth}
         setShowMenu={setShowMenu}
         showMenu={showMenu}
-        alerts={alerts}
-        setShowAlerts={setShowAlerts}
       />
 
       <SearchBar
@@ -246,6 +271,7 @@ const WeatherApp = ({ darkMode, setDarkMode, showAuth, setShowAuth }) => {
         searchResults={searchResults}
         selectCity={selectCity}
         favorites={favorites}
+        recentSearches={recentSearches}
         user={user}
       />
 
@@ -264,21 +290,18 @@ const WeatherApp = ({ darkMode, setDarkMode, showAuth, setShowAuth }) => {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             getBestDayLabel={getBestDayLabel}
-            compareCity={compareCity}
-            setCompareCity={setCompareCity}
             user={user}
           />
         ) : null}
       </main>
 
-      {showAuth && <AuthModal darkMode={darkMode} onClose={() => setShowAuth(false)} />}
-      {showAlerts && <AlertsPanel darkMode={darkMode} alerts={alerts} onClose={() => setShowAlerts(false)} />}
+      {showAuth && <GoogleAuthModal darkMode={darkMode} onClose={() => setShowAuth(false)} />}
     </>
   );
 };
 
 // Header Component
-const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu, showMenu, alerts, setShowAlerts }) => (
+const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu, showMenu }) => (
   <header className={`${darkMode ? 'bg-black/30' : 'bg-white/60'} backdrop-blur-xl border-b ${darkMode ? 'border-white/10' : 'border-black/5'} sticky top-0 z-50`}>
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
       <div className="flex items-center justify-between">
@@ -295,16 +318,6 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
         </div>
         
         <div className="flex items-center gap-3">
-          {user && alerts.length > 0 && (
-            <button 
-              onClick={() => setShowAlerts(true)}
-              className={`relative p-3 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-900/10 hover:bg-gray-900/20 text-gray-900'} transition-all`}
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-          )}
-          
           <button 
             onClick={() => setDarkMode(!darkMode)}
             className={`p-3 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-900/10 hover:bg-gray-900/20 text-gray-900'} transition-all`}
@@ -318,12 +331,19 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
                 onClick={() => setShowMenu(!showMenu)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-900/10 hover:bg-gray-900/20 text-gray-900'} transition-all`}
               >
-                <UserIcon className="w-5 h-5" />
+                {user.picture ? (
+                  <img src={user.picture} alt={user.name} className="w-6 h-6 rounded-full" />
+                ) : (
+                  <UserIcon className="w-5 h-5" />
+                )}
                 <span className="hidden md:inline">{user.name}</span>
               </button>
               
               {showMenu && (
                 <div className={`absolute right-0 mt-2 w-48 ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-xl py-2 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+                  <div className="px-4 py-2 border-b border-white/10">
+                    <p className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{user.email}</p>
+                  </div>
                   <button onClick={logout} className={`w-full px-4 py-2 text-left ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-gray-100 text-gray-900'} flex items-center gap-2`}>
                     <LogOut className="w-4 h-4" />
                     Logout
@@ -346,7 +366,7 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
 );
 
 // Search Bar Component
-const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, searchResults, selectCity, favorites, user }) => (
+const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, searchResults, selectCity, favorites, recentSearches, user }) => (
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
     <div className="relative">
       <div className={`flex gap-2 ${darkMode ? 'bg-white/10' : 'bg-white/80'} backdrop-blur-xl rounded-2xl p-2 ${darkMode ? 'border border-white/20' : 'border border-gray-200'} shadow-xl`}>
@@ -402,10 +422,77 @@ const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, search
         ))}
       </div>
     )}
+
+    {user && recentSearches.length > 0 && (
+      <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
+        <span className={`text-sm font-semibold ${darkMode ? 'text-purple-300' : 'text-orange-600'} px-2 py-1`}>Recent:</span>
+        {recentSearches.map((city, i) => (
+          <button
+            key={i}
+            onClick={() => selectCity(city)}
+            className={`px-4 py-2 rounded-xl ${darkMode ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} transition-all whitespace-nowrap`}
+          >
+            {city.name}
+          </button>
+        ))}
+      </div>
+    )}
   </div>
 );
 
-// Empty State
+// Google Auth Modal
+const GoogleAuthModal = ({ darkMode, onClose }) => {
+  const { loginWithGoogle } = useAuth();
+
+  useEffect(() => {
+    // Initialize Google Sign-In
+    if (window.google) {
+      window.google.accounts.id.initialize({
+        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+        callback: loginWithGoogle
+      });
+
+      window.google.accounts.id.renderButton(
+        document.getElementById('google-signin-button'),
+        { 
+          theme: darkMode ? 'filled_black' : 'outline',
+          size: 'large',
+          width: 350,
+          text: 'signin_with'
+        }
+      );
+    }
+  }, [darkMode, loginWithGoogle]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-8 max-w-md w-full shadow-2xl`}>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            Sign In
+          </h2>
+          <button onClick={onClose} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
+            <XIcon className={`w-5 h-5 ${darkMode ? 'text-white' : 'text-gray-900'}`} />
+          </button>
+        </div>
+
+        <div className="mb-6">
+          <p className={`text-center ${darkMode ? 'text-purple-300' : 'text-gray-600'} mb-4`}>
+            Sign in to save your favorite destinations and trips
+          </p>
+          <div id="google-signin-button" className="flex justify-center"></div>
+        </div>
+
+        <div className={`text-xs text-center ${darkMode ? 'text-purple-400' : 'text-gray-500'}`}>
+          <p>Your data is stored securely in your browser.</p>
+          <p className="mt-1">No passwords needed with Google Sign-In!</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Empty State, Loading State, Weather Display components remain the same...
 const EmptyState = ({ darkMode }) => (
   <div className="text-center py-20">
     <div className={`inline-block p-8 rounded-3xl ${darkMode ? 'bg-white/5' : 'bg-white/50'} backdrop-blur-xl mb-6`}>
@@ -420,7 +507,6 @@ const EmptyState = ({ darkMode }) => (
   </div>
 );
 
-// Loading State
 const LoadingState = ({ darkMode }) => (
   <div className="text-center py-20">
     <div className={`inline-block p-8 rounded-3xl ${darkMode ? 'bg-white/5' : 'bg-white/50'} backdrop-blur-xl`}>
@@ -430,13 +516,12 @@ const LoadingState = ({ darkMode }) => (
   </div>
 );
 
-// Weather Display (simplified - would be split into more components)
+// Weather Display (simplified version - keeping core features)
 const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggleFavorite, activeTab, setActiveTab, getBestDayLabel }) => {
   const isFavorite = favorites.some(f => f.name === selectedCity.name);
 
   return (
     <div className="space-y-6">
-      {/* City Header */}
       <div className={`${darkMode ? 'bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 border-white/10' : 'bg-gradient-to-r from-orange-100 to-pink-100 border-gray-200'} backdrop-blur-xl rounded-3xl p-8 border shadow-2xl`}>
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
@@ -459,7 +544,6 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
           </div>
         </div>
 
-        {/* Climate Summary */}
         {weatherData.climateSummary && (
           <div className={`${darkMode ? 'bg-white/10' : 'bg-white/70'} rounded-2xl p-4 mb-6`}>
             <div className="flex items-start gap-3">
@@ -474,14 +558,12 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
           </div>
         )}
 
-        {/* Current Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
           <StatCard darkMode={darkMode} icon={Wind} label="Wind" value={`${weatherData.current.windSpeed} km/h`} />
-          <StatCard darkMode={darkMode} icon={Droplets} label="Humidity" value="65%" />
+          <StatCard darkMode={darkMode} icon={Droplets} label="Condition" value={weatherData.current.condition} />
         </div>
       </div>
 
-      {/* Tabs */}
       <div className={`flex gap-2 overflow-x-auto ${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-2 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
         {[
           { id: 'forecast', label: 'Forecast', icon: Calendar },
@@ -506,7 +588,6 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
         })}
       </div>
 
-      {/* Tab Content */}
       {activeTab === 'forecast' && <ForecastTab darkMode={darkMode} weatherData={weatherData} getBestDayLabel={getBestDayLabel} />}
       {activeTab === 'packing' && <PackingTab darkMode={darkMode} packingList={weatherData.packingList} />}
       {activeTab === 'activities' && <ActivitiesTab darkMode={darkMode} activityScores={weatherData.activityScores} />}
@@ -514,7 +595,6 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
   );
 };
 
-// Stat Card Component
 const StatCard = ({ darkMode, icon: Icon, label, value }) => (
   <div className={`${darkMode ? 'bg-white/10' : 'bg-white/70'} rounded-xl p-4`}>
     <Icon className={`w-5 h-5 ${darkMode ? 'text-purple-300' : 'text-orange-500'} mb-2`} />
@@ -523,7 +603,6 @@ const StatCard = ({ darkMode, icon: Icon, label, value }) => (
   </div>
 );
 
-// Forecast Tab
 const ForecastTab = ({ darkMode, weatherData, getBestDayLabel }) => (
   <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
     <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6`}>7-Day Forecast</h3>
@@ -570,7 +649,6 @@ const ForecastTab = ({ darkMode, weatherData, getBestDayLabel }) => (
   </div>
 );
 
-// Packing Tab
 const PackingTab = ({ darkMode, packingList }) => (
   <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
     <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6 flex items-center gap-2`}>
@@ -600,7 +678,6 @@ const PackingTab = ({ darkMode, packingList }) => (
   </div>
 );
 
-// Activities Tab
 const ActivitiesTab = ({ darkMode, activityScores }) => (
   <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
     <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6`}>Activity Recommendations</h3>
@@ -624,131 +701,6 @@ const ActivitiesTab = ({ darkMode, activityScores }) => (
           </div>
         </div>
       ))}
-    </div>
-  </div>
-);
-
-// Auth Modal (simplified)
-const AuthModal = ({ darkMode, onClose }) => {
-  const { login, register } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      if (isLogin) {
-        await login(email, password);
-      } else {
-        await register(name, email, password);
-      }
-      onClose();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-8 max-w-md w-full shadow-2xl`}>
-        <div className="flex justify-between items-center mb-6">
-          <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-            {isLogin ? 'Sign In' : 'Create Account'}
-          </h2>
-          <button onClick={onClose} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
-            <XIcon className={`w-5 h-5 ${darkMode ? 'text-white' : 'text-gray-900'}`} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl ${darkMode ? 'bg-white/10 text-white' : 'bg-gray-100 text-gray-900'} outline-none`}
-              required
-            />
-          )}
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl ${darkMode ? 'bg-white/10 text-white' : 'bg-gray-100 text-gray-900'} outline-none`}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl ${darkMode ? 'bg-white/10 text-white' : 'bg-gray-100 text-gray-900'} outline-none`}
-            required
-          />
-
-          {error && (
-            <div className="text-red-500 text-sm">{error}</div>
-          )}
-
-          <button
-            type="submit"
-            className={`w-full py-3 rounded-xl ${darkMode ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500' : 'bg-gradient-to-r from-orange-500 to-pink-500'} text-white font-semibold`}
-          >
-            {isLogin ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
-
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className={`text-sm ${darkMode ? 'text-purple-300' : 'text-orange-600'} hover:underline`}
-          >
-            {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Alerts Panel
-const AlertsPanel = ({ darkMode, alerts, onClose }) => (
-  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-y-auto`}>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
-          <Bell className="w-6 h-6" />
-          Weather Alerts
-        </h2>
-        <button onClick={onClose} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
-          <XIcon className={`w-5 h-5 ${darkMode ? 'text-white' : 'text-gray-900'}`} />
-        </button>
-      </div>
-
-      <div className="space-y-3">
-        {alerts.map((alert, i) => (
-          <div key={i} className={`p-4 rounded-xl ${
-            alert.severity === 'high' ? 'bg-red-500/20 border-red-500/50' :
-            alert.severity === 'medium' ? 'bg-yellow-500/20 border-yellow-500/50' :
-            'bg-blue-500/20 border-blue-500/50'
-          } border`}>
-            <div className={`font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-1`}>{alert.location}</div>
-            <div className={`${darkMode ? 'text-white/80' : 'text-gray-700'}`}>{alert.message}</div>
-            <div className={`text-sm ${darkMode ? 'text-white/60' : 'text-gray-600'} mt-1`}>{alert.day}</div>
-          </div>
-        ))}
-        {alerts.length === 0 && (
-          <div className={`text-center py-8 ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>
-            No weather alerts at this time
-          </div>
-        )}
-      </div>
     </div>
   </div>
 );
