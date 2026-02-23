@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { Cloud, Sun, CloudRain, Wind, Droplets, Eye, Calendar, MapPin, Heart, Search, LogOut, User as UserIcon, Plus, Trash2, Check, AlertTriangle, TrendingUp, Luggage, Share2, Bell, Settings, Menu, X as XIcon } from 'lucide-react';
-
+import { AQICard, HourlyForecast } from './components/HourlyAndAQI';
 // API Configuration
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -715,4 +715,5 @@ const ActivitiesTab = ({ darkMode, activityScores }) => (
 );
 
 export default App;
+
 
