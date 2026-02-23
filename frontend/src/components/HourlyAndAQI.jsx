@@ -1,4 +1,18 @@
+
 // Add these components to your App.js (or App-GoogleAuth.js)
+import React from 'react';
+import { 
+  Cloud, 
+  Sun, 
+  CloudRain, 
+  Wind, 
+  Droplets, 
+  Eye, 
+  Calendar, 
+  Luggage, 
+  TrendingUp 
+} from 'lucide-react';
+
 
 // AQI Display Component
 const AQICard = ({ darkMode, airQuality }) => {
