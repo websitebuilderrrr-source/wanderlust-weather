@@ -401,7 +401,7 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
         user={user}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-0">
         {locationError && (
           <div className="mb-4 p-4 bg-red-500/20 backdrop-blur-xl border border-red-500/50 rounded-xl text-white">
             <p className="font-semibold">Location Error:</p>
@@ -518,7 +518,7 @@ const Header = ({ user, logout, setShowAuth, setShowMenu, showMenu, detectUserLo
 
 // Search Bar Component
 const SearchBar = ({ searchQuery, setSearchQuery, handleSearch, searchResults, selectCity, favorites, recentSearches, user }) => (
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 relative z-10">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 relative">
     <div className="relative">
       <div className="flex gap-2 bg-white/10 backdrop-blur-xl rounded-2xl p-2 border border-white/20 shadow-xl">
         <div className="flex-1 relative">
@@ -541,7 +541,7 @@ const SearchBar = ({ searchQuery, setSearchQuery, handleSearch, searchResults, s
       </div>
 
       {searchResults.length > 0 && (
-        <div className="absolute w-full mt-2 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl border border-white/20 max-h-96 overflow-y-auto z-50">
+        <div className="absolute w-full mt-2 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl border border-white/20 max-h-96 overflow-y-auto z-[999]">
           {searchResults.map((city, i) => (
             <button
               key={i}
@@ -945,3 +945,4 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
