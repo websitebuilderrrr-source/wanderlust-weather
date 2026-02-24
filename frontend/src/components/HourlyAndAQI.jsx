@@ -8,12 +8,15 @@ import {
   Eye 
 } from 'lucide-react';
 
+const glass = "bg-slate-800/40 backdrop-blur-2xl border border-white/20 shadow-xl";
+const glassHover = "hover:bg-slate-800/50";
+
 // AQI Display Component
 const AQICard = ({ darkMode, airQuality }) => {
   if (!airQuality) return null;
 
   return (
-    <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+    <div className={`${glass} rounded-2xl p-6`}>
       <h3 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center gap-2`}>
         <Wind className="w-5 h-5" />
         Air Quality Index
@@ -21,7 +24,7 @@ const AQICard = ({ darkMode, airQuality }) => {
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Main AQI */}
-        <div className={`${darkMode ? 'bg-white/5' : 'bg-white'} rounded-xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+        <div className="bg-slate-800/40 backdrop-blur-xl rounded-xl p-6 border border-white/20">
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'} mb-1`}>Air Quality</div>
@@ -45,7 +48,7 @@ const AQICard = ({ darkMode, airQuality }) => {
         </div>
 
         {/* Pollutants */}
-        <div className={`${darkMode ? 'bg-white/5' : 'bg-white'} rounded-xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+        <div className="bg-slate-800/40 backdrop-blur-xl rounded-xl p-6 border border-white/20">
           <div className={`text-sm font-semibold ${darkMode ? 'text-purple-300' : 'text-gray-600'} mb-4`}>
             Pollutant Levels
           </div>
@@ -92,7 +95,7 @@ const AQICard = ({ darkMode, airQuality }) => {
 // Hourly Forecast Component
 const HourlyForecast = ({ darkMode, hourlyData }) => {
   return (
-    <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+    <div className={`${glass} rounded-2xl p-6`}>
       <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6`}>
         Next 24 Hours
       </h3>
@@ -106,7 +109,7 @@ const HourlyForecast = ({ darkMode, hourlyData }) => {
             return (
               <div 
                 key={i} 
-                className={`flex-shrink-0 ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-white hover:bg-gray-50'} rounded-xl p-4 border ${darkMode ? 'border-white/10' : 'border-gray-200'} transition-all cursor-pointer min-w-[140px]`}
+                className={`flex-shrink-0 bg-slate-800/40 ${glassHover} rounded-xl p-4 border border-white/20 transition-all cursor-pointer min-w-[140px]`}
               >
                 {/* Time */}
                 <div className={`text-sm font-semibold ${darkMode ? 'text-purple-300' : 'text-gray-600'} mb-3 text-center`}>
