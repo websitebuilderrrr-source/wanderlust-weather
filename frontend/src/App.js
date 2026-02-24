@@ -1,44 +1,46 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { Cloud, Sun, CloudRain, Wind, Droplets, Eye, Calendar, MapPin, Heart, Search, LogOut, User as UserIcon, Plus, Trash2, Check, AlertTriangle, TrendingUp, Luggage, Share2, Bell, Settings, Menu, X as XIcon, Sunrise, Sunset } from 'lucide-react';
+import { Cloud, Sun, CloudRain, Wind, Droplets, Eye, Calendar, MapPin, Heart, Search, LogOut, User as UserIcon, Trash2, Check, TrendingUp, Luggage, Share2, X as XIcon, Sunrise, Sunset } from 'lucide-react';
 import { AQICard, HourlyForecast } from './components/HourlyAndAQI';
 
 // API Configuration
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 // Dynamic Background Component
-const DynamicBackground = ({ weatherCondition, isNight, darkMode }) => {
+const DynamicBackground = ({ weatherCondition, isNight }) => {
   const getBackgroundGif = () => {
     const condition = weatherCondition?.toLowerCase() || '';
     
-    // Map weather conditions to your gif files
+    // Map weather conditions to GIF files
     if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('shower')) {
       return isNight ? '/gifs/rainy-night.gif' : '/gifs/rainy-day.gif';
     }
     if (condition.includes('snow')) {
       return isNight ? '/gifs/snowy-night.gif' : '/gifs/snowy-day.gif';
     }
-    // Default day/night
+    // Default clear/cloudy
     return isNight ? '/gifs/clear-night.gif' : '/gifs/clear-day.gif';
   };
 
+  const gifUrl = getBackgroundGif();
+
   return (
     <div 
-      className="fixed inset-0 -z-10 transition-opacity duration-1000"
+      className="fixed inset-0 -z-10"
       style={{
-        backgroundImage: `url(${getBackgroundGif()})`,
+        backgroundImage: `url(${gifUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        opacity: 0.3
+        backgroundAttachment: 'fixed'
       }}
     >
-      {/* Overlay for better readability */}
-      <div className={`absolute inset-0 ${darkMode ? 'bg-slate-900/70' : 'bg-white/70'}`}></div>
+      {/* Dark overlay for better readability */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/85 via-indigo-900/85 to-slate-900/85 backdrop-blur-sm"></div>
     </div>
   );
 };
 
-// Auth Context with localStorage
+// Auth Context
 const AuthContext = createContext();
 
 const AuthProvider = ({ children }) => {
@@ -59,7 +61,9 @@ const AuthProvider = ({ children }) => {
     document.body.appendChild(script);
 
     return () => {
-      document.body.removeChild(script);
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
     };
   }, []);
 
@@ -77,16 +81,6 @@ const AuthProvider = ({ children }) => {
 
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
-      
-      if (!localStorage.getItem('favorites')) {
-        localStorage.setItem('favorites', JSON.stringify([]));
-      }
-      if (!localStorage.getItem('trips')) {
-        localStorage.setItem('trips', JSON.stringify([]));
-      }
-      if (!localStorage.getItem('recentSearches')) {
-        localStorage.setItem('recentSearches', JSON.stringify([]));
-      }
     } catch (error) {
       console.error('Google login error:', error);
     }
@@ -115,7 +109,7 @@ const AuthProvider = ({ children }) => {
 
 const useAuth = () => useContext(AuthContext);
 
-// LocalStorage helper functions
+// LocalStorage helpers
 const StorageHelper = {
   getFavorites: () => {
     const user = JSON.parse(localStorage.getItem('user'));
@@ -129,20 +123,6 @@ const StorageHelper = {
     if (!user) return;
     const key = `favorites_${user.id}`;
     localStorage.setItem(key, JSON.stringify(favorites));
-  },
-  
-  getTrips: () => {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (!user) return [];
-    const key = `trips_${user.id}`;
-    return JSON.parse(localStorage.getItem(key) || '[]');
-  },
-  
-  setTrips: (trips) => {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (!user) return;
-    const key = `trips_${user.id}`;
-    localStorage.setItem(key, JSON.stringify(trips));
   },
   
   getRecentSearches: () => {
@@ -171,7 +151,6 @@ const StorageHelper = {
 
 // Main App Component
 function App() {
-  const [darkMode, setDarkMode] = useState(true);
   const [weatherCondition, setWeatherCondition] = useState('');
   const [isNight, setIsNight] = useState(false);
 
@@ -181,11 +160,8 @@ function App() {
         <DynamicBackground 
           weatherCondition={weatherCondition} 
           isNight={isNight}
-          darkMode={darkMode}
         />
         <WeatherApp 
-          darkMode={darkMode} 
-          setDarkMode={setDarkMode}
           setWeatherCondition={setWeatherCondition}
           setIsNight={setIsNight}
         />
@@ -195,7 +171,7 @@ function App() {
 }
 
 // Weather App Component
-const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) => {
+const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -208,6 +184,7 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
   const [showMenu, setShowMenu] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState(null);
 
   // Auto-detect location on mount
   useEffect(() => {
@@ -236,42 +213,72 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
 
   // Detect user's current location
   const detectUserLocation = () => {
-    if ("geolocation" in navigator) {
-      setLocationLoading(true);
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
+    if (!("geolocation" in navigator)) {
+      setLocationError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setLocationLoading(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        console.log('Got coordinates:', latitude, longitude);
+        
+        try {
+          // Use Open-Meteo geocoding to get city name
+          const geoResponse = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=en&format=json`
+          );
+          const geoData = await geoResponse.json();
           
-          // Get city name from coordinates
-          try {
-            const response = await fetch(
-              `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=en&format=json`
-            );
-            const data = await response.json();
+          if (geoData.results && geoData.results[0]) {
+            const city = {
+              name: geoData.results[0].name,
+              country: geoData.results[0].country,
+              latitude: latitude,
+              longitude: longitude,
+              admin1: geoData.results[0].admin1
+            };
             
-            if (data.results && data.results[0]) {
-              const city = {
-                name: data.results[0].name,
-                country: data.results[0].country,
-                latitude: latitude,
-                longitude: longitude,
-                admin1: data.results[0].admin1
-              };
-              
-              selectCity(city);
-            }
-          } catch (error) {
-            console.error('Geocoding error:', error);
-          } finally {
-            setLocationLoading(false);
+            console.log('Detected city:', city);
+            selectCity(city);
+          } else {
+            setLocationError("Could not determine city name");
           }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
+        } catch (error) {
+          console.error('Geocoding error:', error);
+          setLocationError("Failed to get location details");
+        } finally {
           setLocationLoading(false);
         }
-      );
-    }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setLocationLoading(false);
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError("Location permission denied");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError("Location information unavailable");
+            break;
+          case error.TIMEOUT:
+            setLocationError("Location request timed out");
+            break;
+          default:
+            setLocationError("An unknown error occurred");
+            break;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
   };
 
   const handleSearch = async () => {
@@ -279,11 +286,20 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
     
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/weather/search?q=${encodeURIComponent(searchQuery)}`);
+      // Use Open-Meteo geocoding API directly
+      const response = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=10&language=en&format=json`
+      );
       const data = await response.json();
-      setSearchResults(data);
+      
+      if (data.results) {
+        setSearchResults(data.results);
+      } else {
+        setSearchResults([]);
+      }
     } catch (error) {
       console.error('Search error:', error);
+      setSearchResults([]);
     } finally {
       setLoading(false);
     }
@@ -304,6 +320,11 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
       const response = await fetch(
         `${API_URL}/weather/forecast?lat=${city.latitude}&lon=${city.longitude}&city=${encodeURIComponent(city.name)}`
       );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       setWeatherData(data);
     } catch (error) {
@@ -340,9 +361,9 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
   };
 
   const getBestDayLabel = (score) => {
-    if (score >= 8) return { label: 'Great', color: 'emerald', emoji: '🟢' };
-    if (score >= 5) return { label: 'Okay', color: 'amber', emoji: '🟡' };
-    return { label: 'Avoid', color: 'red', emoji: '🔴' };
+    if (score >= 8) return { label: 'Great', emoji: '🟢' };
+    if (score >= 5) return { label: 'Okay', emoji: '🟡' };
+    return { label: 'Avoid', emoji: '🔴' };
   };
 
   // Close menu when clicking outside
@@ -360,8 +381,6 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
   return (
     <>
       <Header 
-        darkMode={darkMode} 
-        setDarkMode={setDarkMode}
         user={user}
         logout={logout}
         setShowAuth={setShowAuth}
@@ -372,7 +391,6 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
       />
 
       <SearchBar
-        darkMode={darkMode}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         handleSearch={handleSearch}
@@ -384,13 +402,20 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        {locationError && (
+          <div className="mb-4 p-4 bg-red-500/20 backdrop-blur-xl border border-red-500/50 rounded-xl text-white">
+            <p className="font-semibold">Location Error:</p>
+            <p>{locationError}</p>
+            <p className="text-sm mt-2">You can still search for cities manually above.</p>
+          </div>
+        )}
+
         {!selectedCity ? (
-          <EmptyState darkMode={darkMode} locationLoading={locationLoading} />
+          <EmptyState locationLoading={locationLoading} />
         ) : loading ? (
-          <LoadingState darkMode={darkMode} />
+          <LoadingState />
         ) : weatherData ? (
           <WeatherDisplay
-            darkMode={darkMode}
             selectedCity={selectedCity}
             weatherData={weatherData}
             favorites={favorites}
@@ -405,7 +430,6 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
 
       {showAuth && (
         <GoogleAuthModal 
-          darkMode={darkMode} 
           onClose={() => setShowAuth(false)}
           setShowAuth={setShowAuth}
         />
@@ -414,20 +438,20 @@ const WeatherApp = ({ darkMode, setDarkMode, setWeatherCondition, setIsNight }) 
   );
 };
 
-// Header Component with location button
-const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu, showMenu, detectUserLocation, locationLoading }) => (
-  <header className={`${darkMode ? 'bg-black/30' : 'bg-white/60'} backdrop-blur-xl border-b ${darkMode ? 'border-white/10' : 'border-black/5'} sticky top-0 z-50`}>
+// Header Component
+const Header = ({ user, logout, setShowAuth, setShowMenu, showMenu, detectUserLocation, locationLoading }) => (
+  <header className="bg-white/10 backdrop-blur-xl border-b border-white/20 sticky top-0 z-50">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-2xl ${darkMode ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500' : 'bg-gradient-to-br from-orange-400 to-pink-500'} flex items-center justify-center shadow-lg`}>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center shadow-lg">
             <Sun className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            <h1 className="text-2xl font-bold text-white">
               Wanderlust Weather
             </h1>
-            <p className={`text-sm ${darkMode ? 'text-purple-300' : 'text-orange-600'}`}>Travel smarter with weather insights</p>
+            <p className="text-sm text-cyan-200">Travel smarter with weather insights</p>
           </div>
         </div>
         
@@ -436,7 +460,7 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
           <button 
             onClick={detectUserLocation}
             disabled={locationLoading}
-            className={`p-3 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-900/10 hover:bg-gray-900/20 text-gray-900'} transition-all ${locationLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className="p-3 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all backdrop-blur-md border border-white/20 disabled:opacity-50"
             title="Detect my location"
           >
             {locationLoading ? (
@@ -446,18 +470,11 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
             )}
           </button>
 
-          <button 
-            onClick={() => setDarkMode(!darkMode)}
-            className={`p-3 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-900/10 hover:bg-gray-900/20 text-gray-900'} transition-all`}
-          >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Cloud className="w-5 h-5" />}
-          </button>
-
           {user ? (
             <div className="relative menu-container">
               <button 
                 onClick={() => setShowMenu(!showMenu)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-900/10 hover:bg-gray-900/20 text-gray-900'} transition-all`}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all backdrop-blur-md border border-white/20"
               >
                 {user.picture ? (
                   <img src={user.picture} alt={user.name} className="w-6 h-6 rounded-full" />
@@ -468,16 +485,16 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
               </button>
               
               {showMenu && (
-                <div className={`absolute right-0 mt-2 w-48 ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-xl py-2 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+                <div className="absolute right-0 mt-2 w-48 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl py-2 border border-white/20">
                   <div className="px-4 py-2 border-b border-white/10">
-                    <p className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{user.email}</p>
+                    <p className="text-sm text-white">{user.email}</p>
                   </div>
                   <button 
                     onClick={() => {
                       logout();
                       setShowMenu(false);
                     }} 
-                    className={`w-full px-4 py-2 text-left ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-gray-100 text-gray-900'} flex items-center gap-2`}
+                    className="w-full px-4 py-2 text-left hover:bg-white/10 text-white flex items-center gap-2"
                   >
                     <LogOut className="w-4 h-4" />
                     Logout
@@ -488,7 +505,7 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
           ) : (
             <button 
               onClick={() => setShowAuth(true)}
-              className={`px-6 py-2 rounded-xl ${darkMode ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600' : 'bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600'} text-white font-semibold transition-all`}
+              className="px-6 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold transition-all shadow-lg"
             >
               Sign In
             </button>
@@ -499,40 +516,40 @@ const Header = ({ darkMode, setDarkMode, user, logout, setShowAuth, setShowMenu,
   </header>
 );
 
-// Search Bar Component - unchanged
-const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, searchResults, selectCity, favorites, recentSearches, user }) => (
+// Search Bar Component
+const SearchBar = ({ searchQuery, setSearchQuery, handleSearch, searchResults, selectCity, favorites, recentSearches, user }) => (
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 relative z-10">
     <div className="relative">
-      <div className={`flex gap-2 ${darkMode ? 'bg-white/10' : 'bg-white/80'} backdrop-blur-xl rounded-2xl p-2 ${darkMode ? 'border border-white/20' : 'border border-gray-200'} shadow-xl`}>
+      <div className="flex gap-2 bg-white/10 backdrop-blur-xl rounded-2xl p-2 border border-white/20 shadow-xl">
         <div className="flex-1 relative">
-          <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${darkMode ? 'text-purple-300' : 'text-orange-500'}`} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-300" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Search any city worldwide..."
-            className={`w-full pl-12 pr-4 py-3 ${darkMode ? 'bg-transparent text-white placeholder-purple-300/50' : 'bg-transparent text-gray-900 placeholder-gray-500'} outline-none text-lg`}
+            className="w-full pl-12 pr-4 py-3 bg-transparent text-white placeholder-cyan-200/50 outline-none text-lg"
           />
         </div>
         <button
           onClick={handleSearch}
-          className={`px-6 py-3 ${darkMode ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600' : 'bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600'} text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl`}
+          className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-xl font-semibold transition-all shadow-lg"
         >
           Search
         </button>
       </div>
 
       {searchResults.length > 0 && (
-        <div className={`absolute w-full mt-2 ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-xl border ${darkMode ? 'border-white/10' : 'border-gray-200'} max-h-96 overflow-y-auto z-50`}>
+        <div className="absolute w-full mt-2 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl border border-white/20 max-h-96 overflow-y-auto z-50">
           {searchResults.map((city, i) => (
             <button
               key={i}
               onClick={() => selectCity(city)}
-              className={`w-full px-4 py-3 text-left ${darkMode ? 'hover:bg-violet-500/20 text-white' : 'hover:bg-orange-100 text-gray-900'} border-b ${darkMode ? 'border-white/10' : 'border-gray-200'} last:border-0 transition-colors`}
+              className="w-full px-4 py-3 text-left hover:bg-white/10 text-white border-b border-white/10 last:border-0 transition-colors"
             >
               <div className="font-semibold">{city.name}</div>
-              <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>
+              <div className="text-sm text-cyan-200">
                 {city.admin1 && `${city.admin1}, `}{city.country}
               </div>
             </button>
@@ -543,12 +560,12 @@ const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, search
 
     {user && favorites.length > 0 && (
       <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-        <span className={`text-sm font-semibold ${darkMode ? 'text-purple-300' : 'text-orange-600'} px-2 py-1`}>Favorites:</span>
+        <span className="text-sm font-semibold text-cyan-300 px-2 py-1">Favorites:</span>
         {favorites.map((city, i) => (
           <button
             key={i}
             onClick={() => selectCity(city)}
-            className={`px-4 py-2 rounded-xl ${darkMode ? 'bg-white/10 hover:bg-violet-500/30 text-white' : 'bg-white hover:bg-orange-100 text-gray-900'} border ${darkMode ? 'border-white/20' : 'border-gray-200'} transition-all whitespace-nowrap flex items-center gap-2`}
+            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all whitespace-nowrap flex items-center gap-2 backdrop-blur-md"
           >
             <Heart className="w-4 h-4 fill-current" />
             {city.name}
@@ -559,12 +576,12 @@ const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, search
 
     {user && recentSearches.length > 0 && (
       <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
-        <span className={`text-sm font-semibold ${darkMode ? 'text-purple-300' : 'text-orange-600'} px-2 py-1`}>Recent:</span>
+        <span className="text-sm font-semibold text-cyan-300 px-2 py-1">Recent:</span>
         {recentSearches.map((city, i) => (
           <button
             key={i}
             onClick={() => selectCity(city)}
-            className={`px-4 py-2 rounded-xl ${darkMode ? 'bg-white/5 hover:bg-violet-500/20 text-white/80' : 'bg-gray-100 hover:bg-orange-50 text-gray-700'} transition-all whitespace-nowrap`}
+            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 transition-all whitespace-nowrap backdrop-blur-md"
           >
             {city.name}
           </button>
@@ -574,8 +591,8 @@ const SearchBar = ({ darkMode, searchQuery, setSearchQuery, handleSearch, search
   </div>
 );
 
-// Google Auth Modal with auto-close
-const GoogleAuthModal = ({ darkMode, onClose, setShowAuth }) => {
+// Google Auth Modal
+const GoogleAuthModal = ({ onClose, setShowAuth }) => {
   const { loginWithGoogle } = useAuth();
 
   useEffect(() => {
@@ -584,7 +601,6 @@ const GoogleAuthModal = ({ darkMode, onClose, setShowAuth }) => {
         client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
         callback: (response) => {
           loginWithGoogle(response);
-          // Auto-close modal after successful login
           setTimeout(() => {
             setShowAuth(false);
           }, 500);
@@ -594,35 +610,33 @@ const GoogleAuthModal = ({ darkMode, onClose, setShowAuth }) => {
       window.google.accounts.id.renderButton(
         document.getElementById('google-signin-button'),
         { 
-          theme: darkMode ? 'filled_black' : 'outline',
+          theme: 'filled_black',
           size: 'large',
           width: 350,
           text: 'signin_with'
         }
       );
     }
-  }, [darkMode, loginWithGoogle, setShowAuth]);
+  }, [loginWithGoogle, setShowAuth]);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-8 max-w-md w-full shadow-2xl`}>
+      <div className="bg-slate-800/95 backdrop-blur-xl rounded-2xl p-8 max-w-md w-full shadow-2xl border border-white/20">
         <div className="flex justify-between items-center mb-6">
-          <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-            Sign In
-          </h2>
-          <button onClick={onClose} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}>
-            <XIcon className={`w-5 h-5 ${darkMode ? 'text-white' : 'text-gray-900'}`} />
+          <h2 className="text-2xl font-bold text-white">Sign In</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10">
+            <XIcon className="w-5 h-5 text-white" />
           </button>
         </div>
 
         <div className="mb-6">
-          <p className={`text-center ${darkMode ? 'text-purple-300' : 'text-gray-600'} mb-4`}>
+          <p className="text-center text-cyan-200 mb-4">
             Sign in to save your favorite destinations and trips
           </p>
           <div id="google-signin-button" className="flex justify-center"></div>
         </div>
 
-        <div className={`text-xs text-center ${darkMode ? 'text-purple-400' : 'text-gray-500'}`}>
+        <div className="text-xs text-center text-cyan-300">
           <p>Your data is stored securely in your browser.</p>
           <p className="mt-1">No passwords needed with Google Sign-In!</p>
         </div>
@@ -631,121 +645,119 @@ const GoogleAuthModal = ({ darkMode, onClose, setShowAuth }) => {
   );
 };
 
-// UV Index Meter Component
-const UVMeter = ({ darkMode, uvIndex }) => {
-  const getUVColor = (uv) => {
-    if (uv <= 2) return { color: '#299501', label: 'Low', bg: 'from-green-400 to-green-600' };
-    if (uv <= 5) return { color: '#f7e400', label: 'Moderate', bg: 'from-yellow-400 to-yellow-600' };
-    if (uv <= 7) return { color: '#f85900', label: 'High', bg: 'from-orange-400 to-orange-600' };
-    if (uv <= 10) return { color: '#d8001d', label: 'Very High', bg: 'from-red-400 to-red-600' };
-    return { color: '#998cff', label: 'Extreme', bg: 'from-purple-400 to-purple-600' };
+// UV Index Meter
+const UVMeter = ({ uvIndex }) => {
+  const getUVInfo = (uv) => {
+    if (uv <= 2) return { color: '#00e400', label: 'Low', bg: 'from-green-400 to-green-600' };
+    if (uv <= 5) return { color: '#ffff00', label: 'Moderate', bg: 'from-yellow-400 to-yellow-600' };
+    if (uv <= 7) return { color: '#ff7e00', label: 'High', bg: 'from-orange-400 to-orange-600' };
+    if (uv <= 10) return { color: '#ff0000', label: 'Very High', bg: 'from-red-400 to-red-600' };
+    return { color: '#b19cd9', label: 'Extreme', bg: 'from-purple-400 to-purple-600' };
   };
 
-  const uvInfo = getUVColor(uvIndex);
+  const uvInfo = getUVInfo(uvIndex);
   const percentage = Math.min((uvIndex / 11) * 100, 100);
 
   return (
-    <div className={`${darkMode ? 'bg-white/5' : 'bg-white'} rounded-xl p-4 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+    <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
       <div className="flex items-center justify-between mb-2">
-        <span className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>UV Index</span>
-        <span className={`text-sm font-bold`} style={{ color: uvInfo.color }}>{uvInfo.label}</span>
+        <span className="text-sm text-cyan-200">UV Index</span>
+        <span className="text-sm font-bold" style={{ color: uvInfo.color }}>{uvInfo.label}</span>
       </div>
       
-      {/* UV Meter Bar */}
-      <div className="relative h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="relative h-8 bg-white/10 rounded-full overflow-hidden">
         <div 
           className={`absolute left-0 top-0 h-full bg-gradient-to-r ${uvInfo.bg} transition-all duration-500 rounded-full`}
           style={{ width: `${percentage}%` }}
         ></div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className={`text-lg font-bold ${uvIndex > 5 ? 'text-white' : 'text-gray-900'}`}>
+          <span className="text-lg font-bold text-white drop-shadow-lg">
             {uvIndex}
           </span>
         </div>
       </div>
       
-      {/* UV Scale */}
-      <div className="flex justify-between mt-2 text-xs">
-        <span className={darkMode ? 'text-green-400' : 'text-green-600'}>0-2</span>
-        <span className={darkMode ? 'text-yellow-400' : 'text-yellow-600'}>3-5</span>
-        <span className={darkMode ? 'text-orange-400' : 'text-orange-600'}>6-7</span>
-        <span className={darkMode ? 'text-red-400' : 'text-red-600'}>8-10</span>
-        <span className={darkMode ? 'text-purple-400' : 'text-purple-600'}>11+</span>
+      <div className="flex justify-between mt-2 text-xs text-cyan-200">
+        <span>0-2</span>
+        <span>3-5</span>
+        <span>6-7</span>
+        <span>8-10</span>
+        <span>11+</span>
       </div>
     </div>
   );
 };
 
-// Empty State, Loading State remain the same...
-const EmptyState = ({ darkMode, locationLoading }) => (
+// Empty State
+const EmptyState = ({ locationLoading }) => (
   <div className="text-center py-20">
-    <div className={`inline-block p-8 rounded-3xl ${darkMode ? 'bg-white/5' : 'bg-white/50'} backdrop-blur-xl mb-6`}>
-      <MapPin className={`w-20 h-20 mx-auto ${darkMode ? 'text-purple-400' : 'text-orange-500'} mb-4 ${locationLoading ? 'animate-pulse' : ''}`} />
-      <h2 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-2`}>
+    <div className="inline-block p-8 rounded-3xl bg-white/10 backdrop-blur-xl mb-6 border border-white/20">
+      <MapPin className={`w-20 h-20 mx-auto text-cyan-300 mb-4 ${locationLoading ? 'animate-pulse' : ''}`} />
+      <h2 className="text-3xl font-bold text-white mb-2">
         {locationLoading ? 'Detecting your location...' : 'Where are you traveling?'}
       </h2>
-      <p className={`text-lg ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>
-        {locationLoading ? 'Please allow location access' : 'Search for a destination to see weather forecasts and travel insights'}
+      <p className="text-lg text-cyan-200">
+        {locationLoading ? 'Please allow location access' : 'Search for a destination to see weather forecasts'}
       </p>
     </div>
   </div>
 );
 
-const LoadingState = ({ darkMode }) => (
+const LoadingState = () => (
   <div className="text-center py-20">
-    <div className={`inline-block p-8 rounded-3xl ${darkMode ? 'bg-white/5' : 'bg-white/50'} backdrop-blur-xl`}>
-      <div className="animate-spin w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-      <p className={`text-lg ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>Loading weather data...</p>
+    <div className="inline-block p-8 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20">
+      <div className="animate-spin w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+      <p className="text-lg text-cyan-200">Loading weather data...</p>
     </div>
   </div>
 );
 
-// Weather Display with Sunrise/Sunset
-const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggleFavorite, activeTab, setActiveTab, getBestDayLabel, user }) => {
+// Weather Display Component
+const WeatherDisplay = ({ selectedCity, weatherData, favorites, toggleFavorite, activeTab, setActiveTab, getBestDayLabel, user }) => {
   const isFavorite = favorites.some(f => f.name === selectedCity.name);
 
   return (
     <div className="space-y-6">
       {/* City Header */}
-      <div className={`${darkMode ? 'bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 border-white/10' : 'bg-gradient-to-r from-orange-100 to-pink-100 border-gray-200'} backdrop-blur-xl rounded-3xl p-8 border shadow-2xl`}>
+      <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20 shadow-2xl">
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h2 className={`text-4xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{selectedCity.name}</h2>
+              <h2 className="text-4xl font-bold text-white">{selectedCity.name}</h2>
               <button
                 onClick={() => toggleFavorite(selectedCity)}
-                className={`p-2 rounded-xl ${isFavorite ? (darkMode ? 'bg-pink-500/30 hover:bg-pink-500/40' : 'bg-pink-200 hover:bg-pink-300') : (darkMode ? 'bg-white/10 hover:bg-white/20' : 'bg-white/50 hover:bg-white/70')} transition-all`}
+                className={`p-2 rounded-xl ${isFavorite ? 'bg-pink-500/30 hover:bg-pink-500/40' : 'bg-white/10 hover:bg-white/20'} transition-all backdrop-blur-md border border-white/20`}
               >
-                <Heart className={`w-5 h-5 ${isFavorite ? 'fill-pink-500 text-pink-500' : (darkMode ? 'text-white' : 'text-gray-600')}`} />
+                <Heart className={`w-5 h-5 ${isFavorite ? 'fill-pink-400 text-pink-400' : 'text-white'}`} />
               </button>
             </div>
-            <p className={`text-lg ${darkMode ? 'text-purple-200' : 'text-gray-700'}`}>
+            <p className="text-lg text-cyan-200">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
           <div className="text-right">
-            <div className={`text-7xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{weatherData.current.temp}°</div>
-            <div className={`text-xl ${darkMode ? 'text-purple-200' : 'text-gray-700'}`}>{weatherData.current.condition}</div>
+            <div className="text-7xl font-bold text-white">{weatherData.current.temp}°</div>
+            <div className="text-xl text-cyan-200">{weatherData.current.condition}</div>
           </div>
         </div>
 
         {/* Sunrise & Sunset */}
         {weatherData.daily && weatherData.daily[0] && (
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className={`${darkMode ? 'bg-white/10' : 'bg-white/70'} rounded-xl p-4 flex items-center gap-3`}>
-              <Sunrise className={`w-8 h-8 ${darkMode ? 'text-orange-400' : 'text-orange-600'}`} />
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 flex items-center gap-3 border border-white/20">
+              <Sunrise className="w-8 h-8 text-orange-400" />
               <div>
-                <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>Sunrise</div>
-                <div className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                <div className="text-sm text-cyan-200">Sunrise</div>
+                <div className="text-xl font-bold text-white">
                   {new Date(weatherData.daily[0].sunrise).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                 </div>
               </div>
             </div>
-            <div className={`${darkMode ? 'bg-white/10' : 'bg-white/70'} rounded-xl p-4 flex items-center gap-3`}>
-              <Sunset className={`w-8 h-8 ${darkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 flex items-center gap-3 border border-white/20">
+              <Sunset className="w-8 h-8 text-indigo-400" />
               <div>
-                <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>Sunset</div>
-                <div className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                <div className="text-sm text-cyan-200">Sunset</div>
+                <div className="text-xl font-bold text-white">
                   {new Date(weatherData.daily[0].sunset).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                 </div>
               </div>
@@ -754,12 +766,12 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
         )}
 
         {weatherData.climateSummary && (
-          <div className={`${darkMode ? 'bg-white/10' : 'bg-white/70'} rounded-2xl p-4 mb-6`}>
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-6 border border-white/20">
             <div className="flex items-start gap-3">
-              <Eye className={`w-5 h-5 ${darkMode ? 'text-purple-300' : 'text-orange-500'} mt-1`} />
+              <Eye className="w-5 h-5 text-cyan-300 mt-1" />
               <div>
-                <div className={`text-sm font-semibold ${darkMode ? 'text-purple-300' : 'text-orange-600'} mb-1`}>Travel Overview</div>
-                <p className={`text-base ${darkMode ? 'text-purple-200' : 'text-gray-700'}`}>
+                <div className="text-sm font-semibold text-cyan-300 mb-1">Travel Overview</div>
+                <p className="text-base text-white">
                   {weatherData.climateSummary}
                 </p>
               </div>
@@ -767,24 +779,20 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
           </div>
         )}
 
-        {/* Current Stats with UV Meter */}
+        {/* Current Stats */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatCard darkMode={darkMode} icon={Wind} label="Wind" value={`${weatherData.current.windSpeed} km/h`} />
-          <StatCard darkMode={darkMode} icon={Droplets} label="Condition" value={weatherData.current.condition} />
-          <UVMeter darkMode={darkMode} uvIndex={weatherData.daily[0]?.uv || 0} />
+          <StatCard icon={Wind} label="Wind" value={`${weatherData.current.windSpeed} km/h`} />
+          <StatCard icon={Droplets} label="Condition" value={weatherData.current.condition} />
+          <UVMeter uvIndex={weatherData.daily[0]?.uv || 0} />
         </div>
       </div>
 
-      {/* AQI Card */}
-      {weatherData.airQuality && (
-        <AQICard darkMode={darkMode} airQuality={weatherData.airQuality} />
-      )}
-
-      {/* Hourly Forecast */}
-      <HourlyForecast darkMode={darkMode} hourlyData={weatherData.hourly} />
+      {/* AQI & Hourly */}
+      {weatherData.airQuality && <AQICard airQuality={weatherData.airQuality} />}
+      <HourlyForecast hourlyData={weatherData.hourly} />
 
       {/* Tabs */}
-      <div className={`flex gap-2 overflow-x-auto ${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-2 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+      <div className="flex gap-2 overflow-x-auto bg-white/10 backdrop-blur-xl rounded-2xl p-2 border border-white/20">
         {[
           { id: 'forecast', label: 'Forecast', icon: Calendar },
           { id: 'packing', label: 'Packing', icon: Luggage },
@@ -797,8 +805,8 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                 activeTab === tab.id
-                  ? (darkMode ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg' : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg')
-                  : (darkMode ? 'text-white hover:bg-violet-500/20' : 'text-gray-700 hover:bg-orange-100')
+                  ? 'bg-white/20 text-white shadow-lg border border-white/30'
+                  : 'text-cyan-200 hover:bg-white/10'
               }`}
             >
               <Icon className="w-5 h-5" />
@@ -808,73 +816,67 @@ const WeatherDisplay = ({ darkMode, selectedCity, weatherData, favorites, toggle
         })}
       </div>
 
-      {activeTab === 'forecast' && <ForecastTab darkMode={darkMode} weatherData={weatherData} getBestDayLabel={getBestDayLabel} />}
-      {activeTab === 'packing' && <PackingTab darkMode={darkMode} packingList={weatherData.packingList} />}
-      {activeTab === 'activities' && <ActivitiesTab darkMode={darkMode} activityScores={weatherData.activityScores} />}
+      {activeTab === 'forecast' && <ForecastTab weatherData={weatherData} getBestDayLabel={getBestDayLabel} />}
+      {activeTab === 'packing' && <PackingTab packingList={weatherData.packingList} />}
+      {activeTab === 'activities' && <ActivitiesTab activityScores={weatherData.activityScores} />}
     </div>
   );
 };
 
-const StatCard = ({ darkMode, icon: Icon, label, value }) => (
-  <div className={`${darkMode ? 'bg-white/10' : 'bg-white/70'} rounded-xl p-4`}>
-    <Icon className={`w-5 h-5 ${darkMode ? 'text-purple-300' : 'text-orange-500'} mb-2`} />
-    <div className={`text-sm ${darkMode ? 'text-purple-200' : 'text-gray-600'}`}>{label}</div>
-    <div className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</div>
+const StatCard = ({ icon: Icon, label, value }) => (
+  <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
+    <Icon className="w-5 h-5 text-cyan-300 mb-2" />
+    <div className="text-sm text-cyan-200">{label}</div>
+    <div className="text-xl font-bold text-white">{value}</div>
   </div>
 );
 
-// Forecast Tab with Sunrise/Sunset for each day
-const ForecastTab = ({ darkMode, weatherData, getBestDayLabel }) => (
-  <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
-    <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6`}>7-Day Forecast</h3>
+// Forecast Tab
+const ForecastTab = ({ weatherData, getBestDayLabel }) => (
+  <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
+    <h3 className="text-2xl font-bold text-white mb-6">7-Day Forecast</h3>
     <div className="space-y-4">
       {weatherData.daily.map((day, i) => {
         const quality = getBestDayLabel(day.score);
         return (
-          <div key={i} className={`${darkMode ? 'bg-white/5 hover:bg-violet-500/10' : 'bg-white hover:bg-orange-50'} rounded-xl p-5 border ${darkMode ? 'border-white/10' : 'border-gray-200'} transition-all`}>
+          <div key={i} className="bg-white/5 hover:bg-white/10 rounded-xl p-5 border border-white/20 transition-all backdrop-blur-md">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-4">
-                <div className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} min-w-[140px]`}>
+                <div className="text-lg font-bold text-white min-w-[140px]">
                   {i === 0 ? 'Today' : new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
-                <span 
-                  className="px-4 py-2 rounded-xl font-semibold text-sm flex items-center gap-2"
-                  style={{
-                    backgroundColor: quality.color === 'emerald' ? '#10b98140' : quality.color === 'amber' ? '#f59e0b40' : '#ef444440',
-                    color: quality.color === 'emerald' ? '#34d399' : quality.color === 'amber' ? '#fbbf24' : '#f87171'
-                  }}
-                >
+                <span className="px-4 py-2 rounded-xl font-semibold text-sm bg-white/10 text-white flex items-center gap-2 backdrop-blur-md border border-white/20">
                   <span>{quality.emoji}</span>
                   {quality.label}
                 </span>
               </div>
               <div className="flex gap-6 items-center">
                 <div className="text-center">
-                  <div className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{day.high}°</div>
-                  <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>High</div>
+                  <div className="text-2xl font-bold text-white">{day.high}°</div>
+                  <div className="text-sm text-cyan-200">High</div>
                 </div>
                 <div className="text-center">
-                  <div className={`text-lg font-semibold ${darkMode ? 'text-white/70' : 'text-gray-600'}`}>{day.low}°</div>
-                  <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>Low</div>
+                  <div className="text-lg font-semibold text-white/70">{day.low}°</div>
+                  <div className="text-sm text-cyan-200">Low</div>
                 </div>
                 <div className="text-center">
-                  <Droplets className={`w-5 h-5 ${darkMode ? 'text-blue-400' : 'text-blue-600'} mx-auto`} />
-                  <div className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{day.rainChance}%</div>
+                  <Droplets className="w-5 h-5 text-blue-400 mx-auto" />
+                  <div className="text-sm font-semibold text-white">{day.rainChance}%</div>
                 </div>
               </div>
             </div>
             
-            {/* Sunrise & Sunset for each day */}
+            {/* Sunrise & Sunset */}
             <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/10">
               <div className="flex items-center gap-2">
-                <Sunrise className={`w-4 h-4 ${darkMode ? 'text-orange-400' : 'text-orange-600'}`} />
-                <span className={`text-sm ${darkMode ? 'text-purple-200' : 'text-gray-700'}`}>
+                <Sunrise className="w-4 h-4 text-orange-400" />
+                <span className="text-sm text-cyan-200">
                   {new Date(day.sunrise).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Sunset className={`w-4 h-4 ${darkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                <span className={`text-sm ${darkMode ? 'text-purple-200' : 'text-gray-700'}`}>
+                <Sunset className="w-4 h-4 text-indigo-400" />
+                <span className="text-sm text-cyan-200">
                   {new Date(day.sunset).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                 </span>
               </div>
@@ -886,26 +888,26 @@ const ForecastTab = ({ darkMode, weatherData, getBestDayLabel }) => (
   </div>
 );
 
-const PackingTab = ({ darkMode, packingList }) => (
-  <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
-    <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6 flex items-center gap-2`}>
+const PackingTab = ({ packingList }) => (
+  <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
+    <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
       <Luggage className="w-6 h-6" />
       Smart Packing List
     </h3>
     <div className="space-y-3">
       {packingList && packingList.map((item, i) => (
-        <div key={i} className={`flex items-center gap-4 ${darkMode ? 'bg-white/5 hover:bg-violet-500/10' : 'bg-white hover:bg-orange-50'} rounded-xl p-5 border ${darkMode ? 'border-white/10' : 'border-gray-200'} transition-all`}>
-          <div className={`w-12 h-12 rounded-xl ${darkMode ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500' : 'bg-gradient-to-br from-orange-400 to-pink-500'} flex items-center justify-center text-2xl`}>
+        <div key={i} className="flex items-center gap-4 bg-white/5 hover:bg-white/10 rounded-xl p-5 border border-white/20 transition-all backdrop-blur-md">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-2xl">
             {item.category === 'clothing' ? '👕' : item.category === 'rain' ? '☔' : item.category === 'sun' ? '🕶️' : '🧥'}
           </div>
           <div className="flex-1">
-            <div className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.item}</div>
-            <div className={`text-sm ${darkMode ? 'text-purple-300' : 'text-gray-600'}`}>{item.reason}</div>
+            <div className="font-bold text-lg text-white">{item.item}</div>
+            <div className="text-sm text-cyan-200">{item.reason}</div>
           </div>
           <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-            item.priority === 'essential' ? 'bg-red-500/20 text-red-300' :
-            item.priority === 'recommended' ? 'bg-yellow-500/20 text-yellow-300' :
-            'bg-green-500/20 text-green-300'
+            item.priority === 'essential' ? 'bg-red-500/20 text-red-300 border border-red-500/50' :
+            item.priority === 'recommended' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' :
+            'bg-green-500/20 text-green-300 border border-green-500/50'
           }`}>
             {item.priority}
           </span>
@@ -915,23 +917,23 @@ const PackingTab = ({ darkMode, packingList }) => (
   </div>
 );
 
-const ActivitiesTab = ({ darkMode, activityScores }) => (
-  <div className={`${darkMode ? 'bg-white/5' : 'bg-white/60'} backdrop-blur-xl rounded-2xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
-    <h3 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-6`}>Activity Recommendations</h3>
+const ActivitiesTab = ({ activityScores }) => (
+  <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
+    <h3 className="text-2xl font-bold text-white mb-6">Activity Recommendations</h3>
     <div className="space-y-6">
       {activityScores && activityScores.map((day, i) => (
-        <div key={i} className={`${darkMode ? 'bg-white/5' : 'bg-white'} rounded-xl p-6 border ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
-          <div className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>
+        <div key={i} className="bg-white/5 rounded-xl p-6 border border-white/20 backdrop-blur-md">
+          <div className="text-lg font-bold text-white mb-4">
             {i === 0 ? 'Today' : new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {day.activities.map((activity, idx) => {
               const scoreColor = activity.score >= 7 ? '#10b981' : activity.score >= 5 ? '#f59e0b' : '#ef4444';
               return (
-                <div key={idx} className={`${darkMode ? 'bg-white/5 hover:bg-violet-500/10' : 'bg-gray-50 hover:bg-orange-50'} rounded-xl p-4 text-center transition-all`}>
-                  <div className={`text-sm font-semibold ${darkMode ? 'text-purple-200' : 'text-gray-700'} mb-2`}>{activity.name}</div>
+                <div key={idx} className="bg-white/5 hover:bg-white/10 rounded-xl p-4 text-center transition-all backdrop-blur-md border border-white/10">
+                  <div className="text-sm font-semibold text-cyan-200 mb-2">{activity.name}</div>
                   <div className="text-3xl font-bold mb-1" style={{color: scoreColor}}>{activity.score}</div>
-                  <div className={`text-xs ${darkMode ? 'text-purple-300' : 'text-gray-500'}`}>out of 10</div>
+                  <div className="text-xs text-cyan-300">out of 10</div>
                 </div>
               );
             })}
