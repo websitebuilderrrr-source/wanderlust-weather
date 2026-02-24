@@ -35,7 +35,7 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
       }}
     >
       {/* Dark overlay for better readability */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/85 via-indigo-900/85 to-slate-900/85 backdrop-blur-sm"></div>
+     /* <div className="absolute inset-0 bg-gradient-to-br from-slate-900/85 via-indigo-900/85 to-slate-900/85 backdrop-blur-sm"></div>*/
     </div>
   );
 };
@@ -946,5 +946,6 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
 
