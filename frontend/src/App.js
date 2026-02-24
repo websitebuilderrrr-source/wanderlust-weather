@@ -309,6 +309,7 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
     setSelectedCity(city);
     setSearchResults([]);
     setSearchQuery('');
+    setLocationError(null); 
     
     if (user) {
       StorageHelper.addRecentSearch(city);
@@ -945,4 +946,5 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
