@@ -17,27 +17,68 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
     if (condition.includes('snow')) {
       return isNight ? '/gifs/snowy-night.gif' : '/gifs/snowy-day.gif';
     }
-    // Default clear/cloudy
+    if (condition.includes('clear')) {
+      return isNight ? '/gifs/clear-night.gif' : '/gifs/clear-day.gif';
+    } 
+    if (condition.includes('cloudy')) {
+      return isNight ? '/gifs/cloudy-night.gif' : '/gifs/cloudy-day.gif';
+    }
+    // Default 
     return isNight ? '/gifs/default.gif': '/gifs/default.gif' ;
   };
 
+  const [currentBg, setCurrentBg] = useState(getBackgroundGif());
+  const [nextBg, setNextBg] = useState(null);
+  const [fading, setFading] = useState(false);
+
   const gifUrl = getBackgroundGif();
 
+  useEffect(() => {
+    if (!gifUrl || gifUrl === currentBg) return;
+
+    // start crossfade
+    setNextBg(gifUrl);
+    setFading(true);
+
+    const t = setTimeout(() => {
+      setCurrentBg(gifUrl);
+      setNextBg(null);
+      setFading(false);
+    }, 800); // duration of fade (ms)
+
+    return () => clearTimeout(t);
+  }, [gifUrl, currentBg]);
 
   return (
-    <div 
-      className="fixed inset-0 -z-10"
-      style={{
-        // Try to load GIF first
-        backgroundImage: `url(${gifUrl}), url('/gifs/default.gif')`, 
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      }}
-    >
-      {}
-      <div className="absolute inset-0 bg-slate-900/50"></div>
+    <div className="fixed inset-0 -z-10 overflow-hidden">
+      {/* Current background */}
+      <div
+        className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${fading ? 'opacity-0' : 'opacity-100'}`}
+        style={{
+          backgroundImage: `url(${currentBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'fixed'
+        }}
+      />
+
+      {/* Next background (fades in) */}
+      {nextBg && (
+        <div
+          className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${fading ? 'opacity-100' : 'opacity-0'}`}
+          style={{
+            backgroundImage: `url(${nextBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundAttachment: 'fixed'
+          }}
+        />
+      )}
+
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-slate-900/50" />
     </div>
   );
 };
@@ -311,6 +352,7 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
     setSelectedCity(city);
     setSearchResults([]);
     setSearchQuery('');
+    setLocationError(null);
     
     if (user) {
       StorageHelper.addRecentSearch(city);
@@ -947,5 +989,6 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
 
