@@ -18,7 +18,7 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
       return isNight ? '/gifs/snowy-night.gif' : '/gifs/snowy-day.gif';
     }
     // Default clear/cloudy
-    return isNight ? '/gifs/default.gif';
+    return isNight ? '/gifs/default.gif': '/gifs/default.gif' ;
   };
 
   const gifUrl = getBackgroundGif();
@@ -947,4 +947,5 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
