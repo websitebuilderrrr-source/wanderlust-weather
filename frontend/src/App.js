@@ -11,16 +11,16 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
     const condition = weatherCondition?.toLowerCase() || '';
     
     // Map weather conditions to GIF files
-    if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('shower') || (condition.includes('heavy rain') || (condition.includes('light rain')) {
+    if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('shower') || condition.includes('heavy rain') || condition.includes('light rain')) {
       return isNight ? '/gifs/rainy-night.gif' : '/gifs/rainy-day.gif';
     }
-    if (condition.includes('snow') || (condition.includes('light snow') || (condition.includes('heavy snow') ) {
+    if (condition.includes('snow') || condition.includes('light snow') || condition.includes('heavy snow') ) {
       return isNight ? '/gifs/snowy-night.gif' : '/gifs/snowy-day.gif';
     }
     if (condition.includes('clear')) {
       return isNight ? '/gifs/clear-night.gif' : '/gifs/clear-day.gif';
     } 
-    if (condition.includes('cloudy') || (condition.includes('partly cloudy') || (condition.includes('mostly cloudy')) {
+    if (condition.includes('cloudy') || condition.includes('partly cloudy') || condition.includes('mostly cloudy')) {
       return isNight ? '/gifs/cloudy-night.gif' : '/gifs/cloudy-day.gif';
     }
     // Default 
@@ -989,6 +989,7 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
 
 
