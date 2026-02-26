@@ -188,7 +188,65 @@ const StorageHelper = {
     
     localStorage.setItem(key, JSON.stringify(recent));
   }
+    
+  getSavedTrips: () => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return [];
+    const key = `savedTrips_${user.id}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  },
+
+  saveTrip: (tripPlan) => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return null;
+    
+    const key = `savedTrips_${user.id}`;
+    let trips = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // Create trip object with metadata
+    const savedTrip = {
+      id: Date.now().toString(),
+      name: tripPlan.route.map(r => r.city.name).join(', '),
+      cities: tripPlan.route.map(r => r.city),
+      duration: tripPlan.totalDays,
+      preferences: tripPlan.preferences,
+      createdAt: new Date().toISOString(),
+      tripPlan: tripPlan
+    };
+    
+    trips.unshift(savedTrip);
+    
+    // Keep only last 10 trips
+    if (trips.length > 10) {
+      trips = trips.slice(0, 10);
+    }
+    
+    localStorage.setItem(key, JSON.stringify(trips));
+    return savedTrip;
+  },
+
+  deleteTrip: (tripId) => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return;
+    
+    const key = `savedTrips_${user.id}`;
+    let trips = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    trips = trips.filter(trip => trip.id !== tripId);
+    localStorage.setItem(key, JSON.stringify(trips));
+  },
+
+  getTripById: (tripId) => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return null;
+    
+    const key = `savedTrips_${user.id}`;
+    const trips = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    return trips.find(trip => trip.id === tripId);
+  }
 };
+window.StorageHelper = StorageHelper;
 
 // Main App Component
 function App() {
@@ -1003,4 +1061,5 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
