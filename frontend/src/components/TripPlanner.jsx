@@ -31,7 +31,7 @@ const TripPlanner = ({ onClose, user, StorageHelper }) => {
     }
   }, [user, StorageHelper]);
 
-  // Save current trip
+  // Save current tri
   const saveCurrentTrip = () => {
     if (!user) {
       alert('Please sign in to save trips');
