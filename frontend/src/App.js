@@ -187,7 +187,7 @@ const StorageHelper = {
     }
     
     localStorage.setItem(key, JSON.stringify(recent));
-  }
+  },
     
   getSavedTrips: () => {
     const user = JSON.parse(localStorage.getItem('user'));
@@ -1061,5 +1061,6 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
 
