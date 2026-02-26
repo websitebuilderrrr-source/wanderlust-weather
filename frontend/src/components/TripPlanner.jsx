@@ -1,30 +1,28 @@
 import React, { useState } from 'react';
-import { MapPin, Calendar, Luggage, TrendingUp, AlertTriangle, CheckCircle, X, Plus, Sparkles, Brain, Route, Package, Sun, Cloud, CloudRain, Wind, Thermometer, Users, Heart, Zap, Mountain, Coffee, Camera, Activity } from 'lucide-react';
+import { MapPin, Calendar, Luggage, TrendingUp, AlertTriangle, CheckCircle, X, Plus, Sparkles, Brain, Route, Package, Sun, Cloud, CloudRain, Wind, Thermometer, Users, Heart, Zap, Mountain, Coffee, Camera, Activity, Clock } from 'lucide-react';
 
 /* 
 ═══════════════════════════════════════════════════════════════
-  🧳 AI TRIP PLANNER COMPONENT
+  🧳 AI TRIP PLANNER COMPONENT - WITH TRIP DURATION
 ═══════════════════════════════════════════════════════════════
   
-  Features:
-  - Select up to 7 cities
-  - Choose travel preferences (8 options)
-  - AI analyzes 7-day weather forecast
-  - Optimal route calculation
-  - Day-by-day itinerary
-  - Smart packing recommendations
-  - Weather warnings & tips
-  - Human-friendly AI-generated explanations
+  NEW: Added trip duration selection (1-7 days)
+  
+  Steps:
+  1. Select up to 7 cities
+  2. Choose trip duration (1-7 days)
+  3. Select travel preferences (8 options)
+  4. AI generates optimal plan
   
 ═══════════════════════════════════════════════════════════════
 */
 
 const TripPlanner = ({ onClose }) => {
-  const [step, setStep] = useState(1); // 1: Cities, 2: Days, 3: Preferences, 4: Results
+  const [step, setStep] = useState(1); // 1: Cities, 2: Duration, 3: Preferences, 4: Results
   const [selectedCities, setSelectedCities] = useState([]);
+  const [tripDuration, setTripDuration] = useState(7); // NEW: Trip duration in days (1-7)
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [tripDays, setTripDays] = useState(7); // Default 7 days
   const [preferences, setPreferences] = useState({
     adventurous: false,
     calm: false,
@@ -101,7 +99,7 @@ const TripPlanner = ({ onClose }) => {
     }
 
     setLoading(true);
-    setStep(4); // Now step 4 for results
+    setStep(4);
 
     try {
       // Fetch weather for all cities
@@ -113,8 +111,8 @@ const TripPlanner = ({ onClose }) => {
 
       const citiesWithWeather = await Promise.all(weatherPromises);
 
-      // AI Trip Planning Logic with selected trip days
-      const plan = await analyzeAndPlanTrip(citiesWithWeather, preferences, tripDays);
+      // AI Trip Planning Logic with duration consideration
+      const plan = await analyzeAndPlanTrip(citiesWithWeather, preferences, tripDuration);
       
       setTripPlan(plan);
     } catch (error) {
@@ -127,36 +125,33 @@ const TripPlanner = ({ onClose }) => {
   };
 
   // AI Trip Analysis Logic
-  const analyzeAndPlanTrip = async (citiesWithWeather, prefs, totalDays) => {
-    // Score each city based on weather over 7 days
+  const analyzeAndPlanTrip = async (citiesWithWeather, prefs, duration) => {
+    // Score each city based on weather over specified duration
     const cityScores = citiesWithWeather.map(({ city, weather }) => {
-      const dailyScores = weather.daily.map(day => day.score || 5);
+      const relevantDays = weather.daily.slice(0, duration);
+      const dailyScores = relevantDays.map(day => day.score || 5);
       const avgScore = dailyScores.reduce((a, b) => a + b, 0) / dailyScores.length;
       
       // Factor in preferences
       let preferenceBonus = 0;
       
       if (prefs.adventurous) {
-        // Prefer varied weather
         const variance = calculateVariance(dailyScores);
         preferenceBonus += variance * 0.5;
       }
       
       if (prefs.calm) {
-        // Prefer stable, good weather
         preferenceBonus += avgScore >= 7 ? 2 : 0;
       }
       
       if (prefs.comfortable) {
-        // Prefer moderate temperatures
-        const avgTemp = weather.daily.reduce((sum, day) => sum + day.high, 0) / weather.daily.length;
+        const avgTemp = relevantDays.reduce((sum, day) => sum + day.high, 0) / relevantDays.length;
         if (avgTemp >= 18 && avgTemp <= 26) preferenceBonus += 2;
       }
       
       if (prefs.nature) {
-        // Slight preference for clear weather
-        const clearDays = weather.daily.filter(day => day.rainChance < 20).length;
-        preferenceBonus += (clearDays / 7) * 2;
+        const clearDays = relevantDays.filter(day => day.rainChance < 20).length;
+        preferenceBonus += (clearDays / duration) * 2;
       }
 
       return {
@@ -168,24 +163,14 @@ const TripPlanner = ({ onClose }) => {
       };
     });
 
-    // Sort cities by best to worst weather
     cityScores.sort((a, b) => b.score - a.score);
 
-    // Create optimal route (start with best weather, end with second-best to avoid worst)
     const optimalRoute = createOptimalRoute(cityScores, prefs);
-
-    // Generate day-by-day itinerary with selected trip days
-    const itinerary = generateItinerary(optimalRoute, prefs, totalDays);
-
-    // Generate packing list (combined from all cities)
-    const packingList = generateCombinedPackingList(citiesWithWeather, prefs);
-
-    // Generate AI explanation
-    const aiExplanation = generateAIExplanation(optimalRoute, itinerary, prefs, totalDays);
-
-    // Generate warnings and tips
-    const warnings = generateWarnings(optimalRoute);
-    const tips = generateTips(optimalRoute, prefs);
+    const itinerary = generateItinerary(optimalRoute, prefs, duration);
+    const packingList = generateCombinedPackingList(citiesWithWeather, prefs, duration);
+    const aiExplanation = generateAIExplanation(optimalRoute, itinerary, prefs, duration);
+    const warnings = generateWarnings(optimalRoute, duration);
+    const tips = generateTips(optimalRoute, prefs, duration);
 
     return {
       route: optimalRoute,
@@ -194,7 +179,7 @@ const TripPlanner = ({ onClose }) => {
       aiExplanation,
       warnings,
       tips,
-      totalDays: totalDays,
+      totalDays: duration,
       startDate: new Date(),
       preferences: prefs
     };
@@ -203,25 +188,33 @@ const TripPlanner = ({ onClose }) => {
   // Create optimal route
   const createOptimalRoute = (cityScores, prefs) => {
     if (prefs.adventurous) {
-      // Mix good and challenging weather
       return cityScores;
     }
-    
-    // Start with best weather cities
     return cityScores;
   };
 
   // Generate day-by-day itinerary
-  const generateItinerary = (route, prefs, totalDays) => {
+  const generateItinerary = (route, prefs, duration) => {
     const itinerary = [];
     let currentDay = 0;
+    const citiesCount = route.length;
     
-    route.forEach(({ city, weather, score }) => {
-      // Determine days to spend in this city based on weather and preferences
-      const daysInCity = calculateDaysInCity(weather, score, prefs, totalDays, currentDay);
+    // Calculate base days per city
+    const baseDaysPerCity = Math.floor(duration / citiesCount);
+    const extraDays = duration % citiesCount;
+    
+    route.forEach(({ city, weather, score }, cityIndex) => {
+      if (currentDay >= duration) return;
+      
+      // Allocate days: best cities get extra days
+      let daysInCity = baseDaysPerCity;
+      if (cityIndex < extraDays && score >= 7) {
+        daysInCity += 1;
+      }
+      if (daysInCity === 0) daysInCity = 1;
       
       for (let i = 0; i < daysInCity; i++) {
-        if (currentDay >= totalDays) break;
+        if (currentDay >= duration) break;
         
         const dayWeather = weather.daily[currentDay] || weather.daily[0];
         
@@ -232,7 +225,7 @@ const TripPlanner = ({ onClose }) => {
           weather: dayWeather,
           activities: generateDayActivities(dayWeather, prefs, i === 0),
           arrival: i === 0,
-          departure: i === daysInCity - 1 || currentDay === totalDays - 1,
+          departure: i === daysInCity - 1 || currentDay === duration - 1,
           travelDay: i === 0 && currentDay > 0
         });
         
@@ -240,23 +233,7 @@ const TripPlanner = ({ onClose }) => {
       }
     });
     
-    return itinerary.slice(0, totalDays);
-  };
-
-  // Calculate days to spend in each city
-  const calculateDaysInCity = (weather, score, prefs, totalDays, currentDay) => {
-    const remainingDays = totalDays - currentDay;
-    
-    // Don't spend more days than remaining
-    if (remainingDays <= 0) return 0;
-    
-    // If only 1-2 days left, use them all
-    if (remainingDays <= 2) return remainingDays;
-    
-    // Otherwise calculate based on weather score
-    if (score >= 8) return Math.min(3, remainingDays); // Great weather = stay longer
-    if (score >= 6) return Math.min(2, remainingDays); // Good weather = moderate stay
-    return Math.min(1, remainingDays); // Poor weather = move quickly
+    return itinerary.slice(0, duration);
   };
 
   // Generate activities for a day
@@ -267,7 +244,6 @@ const TripPlanner = ({ onClose }) => {
       activities.push('Arrive and check into accommodation');
       activities.push('Light exploration of the area');
     } else {
-      // Activity based on weather
       if (dayWeather.rainChance < 30) {
         if (prefs.nature) activities.push('Outdoor hiking or nature walk');
         if (prefs.photography) activities.push('Photography tour of scenic spots');
@@ -288,16 +264,16 @@ const TripPlanner = ({ onClose }) => {
   };
 
   // Generate combined packing list
-  const generateCombinedPackingList = (citiesWithWeather, prefs) => {
+  const generateCombinedPackingList = (citiesWithWeather, prefs, duration) => {
     const allItems = new Set();
     const itemReasons = {};
     
     citiesWithWeather.forEach(({ city, weather }) => {
-      const avgTemp = weather.daily.reduce((sum, day) => sum + day.high, 0) / weather.daily.length;
-      const rainyDays = weather.daily.filter(day => day.rainChance > 50).length;
-      const maxUV = Math.max(...weather.daily.map(day => day.uv || 0));
+      const relevantDays = weather.daily.slice(0, duration);
+      const avgTemp = relevantDays.reduce((sum, day) => sum + day.high, 0) / relevantDays.length;
+      const rainyDays = relevantDays.filter(day => day.rainChance > 50).length;
+      const maxUV = Math.max(...relevantDays.map(day => day.uv || 0));
       
-      // Temperature-based clothing
       if (avgTemp > 25) {
         allItems.add('Light summer clothes');
         itemReasons['Light summer clothes'] = `${city.name} has warm temperatures`;
@@ -311,7 +287,6 @@ const TripPlanner = ({ onClose }) => {
         itemReasons['Versatile layers'] = 'Variable temperatures across cities';
       }
       
-      // Rain gear
       if (rainyDays > 2) {
         allItems.add('Waterproof jacket');
         allItems.add('Umbrella');
@@ -319,7 +294,6 @@ const TripPlanner = ({ onClose }) => {
         itemReasons['Waterproof jacket'] = `${rainyDays} rainy days expected in ${city.name}`;
       }
       
-      // Sun protection
       if (maxUV > 7) {
         allItems.add('Sunscreen SPF 50+');
         allItems.add('Sunglasses');
@@ -328,7 +302,6 @@ const TripPlanner = ({ onClose }) => {
       }
     });
     
-    // Preference-based items
     if (prefs.lowLuggage) {
       allItems.add('Quick-dry clothes (pack light!)');
       allItems.add('Travel-size toiletries');
@@ -353,7 +326,6 @@ const TripPlanner = ({ onClose }) => {
       itemReasons['Comfortable walking shoes'] = 'For long days of exploration';
     }
     
-    // Essential items
     allItems.add('Travel documents & insurance');
     allItems.add('Phone charger & power bank');
     allItems.add('Basic first-aid kit');
@@ -367,17 +339,17 @@ const TripPlanner = ({ onClose }) => {
   };
 
   // Generate AI explanation
-  const generateAIExplanation = (route, itinerary, prefs, totalDays) => {
+  const generateAIExplanation = (route, itinerary, prefs, duration) => {
     const cityNames = route.map(r => r.city.name).join(', ');
     const bestCity = route[0].city.name;
     const startCity = itinerary[0]?.city;
     
-    let explanation = `Based on your ${totalDays}-day trip plan and weather forecast, here's your personalized itinerary:\n\n`;
+    let explanation = `Based on your ${duration}-day trip and preferences, here's your personalized plan:\n\n`;
     
     explanation += `🗺️ **Your Route:** ${cityNames}\n\n`;
     
     explanation += `**Why This Order?**\n`;
-    explanation += `We've analyzed the weather patterns across all your chosen cities for the next ${totalDays} days. `;
+    explanation += `We've analyzed the weather patterns for your ${duration}-day journey. `;
     
     if (prefs.calm || prefs.comfortable) {
       explanation += `Since you value ${prefs.calm ? 'calm' : 'comfortable'} travel, we're starting in ${startCity}, which has the most stable weather in the coming days. `;
@@ -389,45 +361,39 @@ const TripPlanner = ({ onClose }) => {
     
     explanation += `${bestCity} shows the best overall conditions (${route[0].score.toFixed(1)}/10 weather score), making it an ideal highlight of your trip.\n\n`;
     
-    // Weather insights
     const rainyDays = itinerary.filter(day => day.weather.rainChance > 50).length;
-    const sunnyDays = totalDays - rainyDays;
+    const sunnyDays = duration - rainyDays;
     
-    explanation += `**Weather Outlook:**\n`;
+    explanation += `**Weather Outlook (${duration} days):**\n`;
     explanation += `Expect ${sunnyDays} days of favorable weather and ${rainyDays} days with possible rain. `;
     
-    if (rainyDays > Math.floor(totalDays / 2)) {
+    if (rainyDays > duration / 2) {
       explanation += `The rainy days are perfect for indoor activities like museums, local cuisine experiences, and cultural exploration. `;
     } else {
       explanation += `Mostly pleasant weather means you'll enjoy plenty of outdoor time. `;
     }
     
-    explanation += `\n\n**Travel Style Match:**\n`;
-    const selectedPrefs = Object.keys(prefs).filter(key => prefs[key]);
-    if (selectedPrefs.length > 0) {
-      explanation += `Your ${totalDays}-day plan is tailored to your ${selectedPrefs.join(', ')} preferences. `;
-      
-      if (prefs.lowLuggage) {
-        explanation += `We've minimized packing requirements with versatile items that work across all cities. `;
-      }
-      if (prefs.foodie) {
-        explanation += `Each city offers unique culinary experiences - we've scheduled rainy days for food exploration. `;
-      }
-      if (prefs.nature) {
-        explanation += `Outdoor activities are scheduled for days with the best weather. `;
-      }
+    explanation += `\n\n**Travel Duration:**\n`;
+    explanation += `Your ${duration}-day trip allows `;
+    if (duration <= 3) {
+      explanation += `a quick but exciting glimpse of ${route.length} ${route.length === 1 ? 'city' : 'cities'}. `;
+    } else if (duration <= 5) {
+      explanation += `a balanced exploration with enough time to experience the highlights. `;
+    } else {
+      explanation += `an in-depth experience with time to truly immerse yourself in each destination. `;
     }
     
     return explanation;
   };
 
   // Generate warnings
-  const generateWarnings = (route) => {
+  const generateWarnings = (route, duration) => {
     const warnings = [];
     
     route.forEach(({ city, weather }) => {
-      const severeWeatherDays = weather.daily.filter(day => 
-        day.score < 4 || day.windSpeed > 40 || day.rainChance > 80
+      const relevantDays = weather.daily.slice(0, duration);
+      const severeWeatherDays = relevantDays.filter(day => 
+        day.score < 4 || (day.windSpeed && day.windSpeed > 40) || day.rainChance > 80
       );
       
       if (severeWeatherDays.length > 0) {
@@ -438,7 +404,7 @@ const TripPlanner = ({ onClose }) => {
         });
       }
       
-      const coldDays = weather.daily.filter(day => day.low < 5);
+      const coldDays = relevantDays.filter(day => day.low < 5);
       if (coldDays.length > 0) {
         warnings.push({
           city: city.name,
@@ -447,7 +413,7 @@ const TripPlanner = ({ onClose }) => {
         });
       }
       
-      const hotDays = weather.daily.filter(day => day.high > 32);
+      const hotDays = relevantDays.filter(day => day.high > 32);
       if (hotDays.length > 0) {
         warnings.push({
           city: city.name,
@@ -461,8 +427,18 @@ const TripPlanner = ({ onClose }) => {
   };
 
   // Generate tips
-  const generateTips = (route, prefs) => {
+  const generateTips = (route, prefs, duration) => {
     const tips = [];
+    
+    tips.push({
+      icon: '⏰',
+      title: 'Time Management',
+      tip: duration <= 3 
+        ? 'With a short trip, prioritize must-see attractions. Consider skip-the-line tickets.'
+        : duration <= 5
+        ? 'You have a good balance - mix popular spots with hidden gems.'
+        : 'With more time, explore at a relaxed pace and venture into local neighborhoods.'
+    });
     
     tips.push({
       icon: '🎒',
@@ -476,14 +452,6 @@ const TripPlanner = ({ onClose }) => {
       icon: '📱',
       title: 'Stay Connected',
       tip: 'Download offline maps for each city. Save important addresses and emergency contacts.'
-    });
-    
-    tips.push({
-      icon: '💰',
-      title: 'Budget Wisely',
-      tip: prefs.lowBudget
-        ? 'Look for free walking tours and local markets. Cook some meals if accommodation allows.'
-        : 'Set a daily budget including meals, activities, and unexpected expenses.'
     });
     
     if (prefs.photography) {
@@ -501,12 +469,6 @@ const TripPlanner = ({ onClose }) => {
         tip: 'Ask locals for restaurant recommendations. The best food is often off the tourist path.'
       });
     }
-    
-    tips.push({
-      icon: '⏰',
-      title: 'Flexible Planning',
-      tip: 'Weather can change. Have backup indoor plans for each day just in case.'
-    });
     
     return tips;
   };
@@ -560,24 +522,14 @@ const TripPlanner = ({ onClose }) => {
 
         {/* Progress Steps */}
         <div className="flex items-center justify-center gap-2 p-4 border-b border-white/20">
-          {[
-            { num: 1, label: 'Cities' },
-            { num: 2, label: 'Days' },
-            { num: 3, label: 'Style' },
-            { num: 4, label: 'Plan' }
-          ].map((s, i) => (
-            <div key={s.num} className="flex items-center">
-              <div className="flex flex-col items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                  step >= s.num ? 'bg-cyan-500 text-white' : 'bg-white/10 text-white/50'
-                }`}>
-                  {s.num}
-                </div>
-                <span className={`text-xs mt-1 ${step >= s.num ? 'text-cyan-300' : 'text-white/50'}`}>
-                  {s.label}
-                </span>
+          {[1, 2, 3, 4].map(s => (
+            <div key={s} className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                step >= s ? 'bg-cyan-500 text-white' : 'bg-white/10 text-white/50'
+              }`}>
+                {s}
               </div>
-              {i < 3 && <div className={`w-8 md:w-12 h-1 mb-4 ${step > s.num ? 'bg-cyan-500' : 'bg-white/10'}`}></div>}
+              {s < 4 && <div className={`w-12 h-1 ${step > s ? 'bg-cyan-500' : 'bg-white/10'}`}></div>}
             </div>
           ))}
         </div>
@@ -592,7 +544,6 @@ const TripPlanner = ({ onClose }) => {
                 <p className="text-cyan-200">Choose up to 7 cities you want to visit ({selectedCities.length}/7)</p>
               </div>
 
-              {/* Search */}
               <div className="relative">
                 <input
                   type="text"
@@ -606,7 +557,6 @@ const TripPlanner = ({ onClose }) => {
                 />
                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-300" />
                 
-                {/* Search Results */}
                 {searchResults.length > 0 && (
                   <div className="absolute w-full mt-2 bg-slate-800/95 backdrop-blur-xl rounded-xl border border-white/20 max-h-60 overflow-y-auto z-10">
                     {searchResults.map((city, i) => (
@@ -625,7 +575,6 @@ const TripPlanner = ({ onClose }) => {
                 )}
               </div>
 
-              {/* Selected Cities */}
               <div className="space-y-2">
                 {selectedCities.map((city, i) => (
                   <div key={i} className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/20">
@@ -666,86 +615,40 @@ const TripPlanner = ({ onClose }) => {
                 <p className="text-cyan-200">Select the total number of days (1-7 days)</p>
               </div>
 
-              {/* Day Selector Buttons */}
-              <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
+              <div className="grid grid-cols-7 gap-3">
                 {[1, 2, 3, 4, 5, 6, 7].map(days => (
                   <button
                     key={days}
-                    onClick={() => setTripDays(days)}
+                    onClick={() => setTripDuration(days)}
                     className={`p-6 rounded-xl border-2 transition-all ${
-                      tripDays === days
+                      tripDuration === days
                         ? 'bg-cyan-500/20 border-cyan-400 shadow-lg shadow-cyan-500/20'
                         : 'bg-white/5 border-white/20 hover:bg-white/10'
                     }`}
                   >
-                    <div className={`text-4xl font-bold mb-2 ${tripDays === days ? 'text-cyan-300' : 'text-white'}`}>
-                      {days}
-                    </div>
-                    <div className={`text-sm ${tripDays === days ? 'text-cyan-200' : 'text-white/70'}`}>
-                      {days === 1 ? 'Day' : 'Days'}
+                    <div className="text-center">
+                      <Clock className={`w-8 h-8 mx-auto mb-2 ${tripDuration === days ? 'text-cyan-300' : 'text-white'}`} />
+                      <div className={`text-3xl font-bold mb-1 ${tripDuration === days ? 'text-white' : 'text-white/80'}`}>
+                        {days}
+                      </div>
+                      <div className="text-sm text-cyan-200">
+                        {days === 1 ? 'day' : 'days'}
+                      </div>
                     </div>
                   </button>
                 ))}
               </div>
 
-              {/* Visual Timeline */}
-              <div className="bg-white/5 backdrop-blur-md rounded-xl p-6 border border-white/20">
-                <div className="flex items-center gap-2 mb-4">
-                  <Calendar className="w-5 h-5 text-cyan-300" />
-                  <span className="text-white font-semibold">Your {tripDays}-Day Journey</span>
-                </div>
-                <div className="flex gap-2">
-                  {Array(7).fill(0).map((_, i) => (
-                    <div
-                      key={i}
-                      className={`flex-1 h-12 rounded-lg flex items-center justify-center font-bold transition-all ${
-                        i < tripDays
-                          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg'
-                          : 'bg-white/5 text-white/30'
-                      }`}
-                    >
-                      {i + 1}
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 text-center text-cyan-200">
-                  Perfect for a {tripDays === 1 ? 'quick day trip' : 
-                               tripDays <= 3 ? 'weekend getaway' : 
-                               tripDays <= 5 ? 'extended trip' : 
-                               'full week adventure'}!
-                </div>
-              </div>
-
-              {/* Trip Length Info */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/20">
-                  <div className="text-2xl mb-2">🏙️</div>
-                  <div className="text-sm text-cyan-200 mb-1">Cities You Can Visit</div>
-                  <div className="text-xl font-bold text-white">
-                    {tripDays === 1 ? '1 city' : 
-                     tripDays <= 3 ? '1-2 cities' : 
-                     tripDays <= 5 ? '2-3 cities' : 
-                     '3-4 cities'}
-                  </div>
-                </div>
-                
-                <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/20">
-                  <div className="text-2xl mb-2">🎯</div>
-                  <div className="text-sm text-cyan-200 mb-1">Trip Pace</div>
-                  <div className="text-xl font-bold text-white">
-                    {tripDays <= 2 ? 'Fast' : 
-                     tripDays <= 4 ? 'Moderate' : 
-                     'Relaxed'}
-                  </div>
-                </div>
-                
-                <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/20">
-                  <div className="text-2xl mb-2">🧳</div>
-                  <div className="text-sm text-cyan-200 mb-1">Packing Style</div>
-                  <div className="text-xl font-bold text-white">
-                    {tripDays <= 2 ? 'Light bag' : 
-                     tripDays <= 4 ? 'Carry-on' : 
-                     'Full luggage'}
+              <div className="bg-cyan-500/10 backdrop-blur-md rounded-xl p-4 border border-cyan-400/30">
+                <div className="flex items-start gap-3">
+                  <Calendar className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-1" />
+                  <div className="text-cyan-200 text-sm">
+                    <strong className="text-white">Selected: {tripDuration} {tripDuration === 1 ? 'day' : 'days'}</strong>
+                    <p className="mt-1">
+                      {tripDuration <= 2 && "Quick getaway - focus on highlights and must-see attractions"}
+                      {tripDuration >= 3 && tripDuration <= 5 && "Balanced trip - time to explore main attractions and local favorites"}
+                      {tripDuration >= 6 && "Extended trip - plenty of time to immerse yourself and discover hidden gems"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -796,7 +699,7 @@ const TripPlanner = ({ onClose }) => {
                 <div className="text-center py-20">
                   <div className="animate-spin w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
                   <p className="text-lg text-white mb-2">Analyzing weather patterns...</p>
-                  <p className="text-cyan-200">Creating your perfect itinerary</p>
+                  <p className="text-cyan-200">Creating your perfect {tripDuration}-day itinerary</p>
                 </div>
               ) : tripPlan ? (
                 <TripResults plan={tripPlan} />
@@ -859,7 +762,7 @@ const TripPlanner = ({ onClose }) => {
   );
 };
 
-// Trip Results Component
+// Trip Results Component (same as before, just showing itinerary is limited by duration now)
 const TripResults = ({ plan }) => {
   const [activeTab, setActiveTab] = useState('itinerary');
 
