@@ -10,28 +10,27 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 const DynamicBackground = ({ weatherCondition, isNight }) => {
   const getBackgroundGif = () => {
     const condition = weatherCondition?.toLowerCase() || '';
-    
-    // Map weather conditions to GIF files
-    if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('shower') || condition.includes('heavy rain') || condition.includes('light rain')) {
+
+    if (condition.includes('rain') || condition.includes('drizzle') || condition.includes('shower')) {
       return isNight ? '/gifs/rainy-night.gif' : '/gifs/rainy-day.gif';
     }
-    if (condition.includes('snow') || condition.includes('light snow') || condition.includes('heavy snow') ) {
+    if (condition.includes('snow')) {
       return isNight ? '/gifs/snowy-night.gif' : '/gifs/snowy-day.gif';
     }
     if (condition.includes('clear')) {
       return isNight ? '/gifs/clear-night.gif' : '/gifs/clear-day.gif';
-    } 
-    if (condition.includes('cloudy') || condition.includes('partly cloudy') || condition.includes('mostly cloudy')) {
+    }
+    if (condition.includes('cloud')) {
       return isNight ? '/gifs/cloudy-night.gif' : '/gifs/cloudy-day.gif';
     }
-    // Default 
-    return isNight ? '/gifs/default.gif': '/gifs/default.gif' ;
+    return '/gifs/default.gif';
   };
 
   const [currentBg, setCurrentBg] = useState(getBackgroundGif());
   const [nextBg, setNextBg] = useState(null);
   const [fading, setFading] = useState(false);
 
+  const gifUrl = getBackgroundGif();
 
   useEffect(() => {
     if (!gifUrl || gifUrl === currentBg) return;
@@ -48,8 +47,6 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
 
     return () => clearTimeout(t);
   }, [gifUrl, currentBg]);
-
-  
 
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden">
@@ -84,7 +81,6 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
     </div>
   );
 };
-
 // Auth Context
 const AuthContext = createContext();
 
@@ -1007,3 +1003,4 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
