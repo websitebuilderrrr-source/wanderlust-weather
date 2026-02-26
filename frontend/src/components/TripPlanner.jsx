@@ -1,21 +1,7 @@
 import React, { useState } from 'react';
 import { MapPin, Calendar, Luggage, TrendingUp, AlertTriangle, CheckCircle, X, Plus, Sparkles, Brain, Route, Package, Sun, Cloud, CloudRain, Wind, Thermometer, Users, Heart, Zap, Mountain, Coffee, Camera, Activity, Clock } from 'lucide-react';
 
-/* 
-═══════════════════════════════════════════════════════════════
-  🧳 AI TRIP PLANNER COMPONENT - WITH TRIP DURATION
-═══════════════════════════════════════════════════════════════
-  
-  NEW: Added trip duration selection (1-7 days)
-  
-  Steps:
-  1. Select up to 7 cities
-  2. Choose trip duration (1-7 days)
-  3. Select travel preferences (8 options)
-  4. AI generates optimal plan
-  
-═══════════════════════════════════════════════════════════════
-*/
+
 
 const TripPlanner = ({ onClose }) => {
   const [step, setStep] = useState(1); // 1: Cities, 2: Duration, 3: Preferences, 4: Results
