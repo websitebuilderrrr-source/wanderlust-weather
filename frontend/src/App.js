@@ -268,7 +268,6 @@ function App() {
     </AuthProvider>
   );
 }
-
 // Weather App Component
 const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
   const { user, logout } = useAuth();
@@ -1061,6 +1060,7 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
 
 
