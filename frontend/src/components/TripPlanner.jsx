@@ -65,7 +65,7 @@ const TripPlanner = ({ onClose, user, StorageHelper }) => {
 
   // Delete a saved trip
   const deleteSavedTrip = (tripId) => {
-    if (confirm('Delete this trip?')) {
+    if (window.confirm('Delete this trip?')) {
       StorageHelper.deleteTrip(tripId);
       setSavedTrips(StorageHelper.getSavedTrips());
     }
