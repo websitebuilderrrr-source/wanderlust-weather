@@ -1,6 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { Cloud, Sun, CloudRain, Wind, Droplets, Eye, Calendar, MapPin, Heart, Search, LogOut, User as UserIcon, Trash2, Check, TrendingUp, Luggage, Share2, X as XIcon, Sunrise, Sunset } from 'lucide-react';
 import { AQICard, HourlyForecast } from './components/HourlyAndAQI';
+import TripPlanner from './components/TripPlanner';
 
 // API Configuration
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -31,7 +32,6 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
   const [nextBg, setNextBg] = useState(null);
   const [fading, setFading] = useState(false);
 
-  const gifUrl = getBackgroundGif();
 
   useEffect(() => {
     if (!gifUrl || gifUrl === currentBg) return;
@@ -48,6 +48,8 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
 
     return () => clearTimeout(t);
   }, [gifUrl, currentBg]);
+
+  
 
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden">
@@ -226,6 +228,7 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [showTripPlanner, setShowTripPlanner] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState(null);
 
@@ -353,7 +356,7 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
     setSearchResults([]);
     setSearchQuery('');
     setLocationError(null);
-    
+
     if (user) {
       StorageHelper.addRecentSearch(city);
       setRecentSearches(StorageHelper.getRecentSearches());
@@ -432,6 +435,7 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
         showMenu={showMenu}
         detectUserLocation={detectUserLocation}
         locationLoading={locationLoading}
+        setShowTripPlanner={setShowTripPlanner}
       />
 
       <SearchBar
@@ -478,12 +482,16 @@ const WeatherApp = ({ setWeatherCondition, setIsNight }) => {
           setShowAuth={setShowAuth}
         />
       )}
+
+      {showTripPlanner && (
+        <TripPlanner onClose={() => setShowTripPlanner(false)} />
+      )}
     </>
   );
 };
 
 // Header Component
-const Header = ({ user, logout, setShowAuth, setShowMenu, showMenu, detectUserLocation, locationLoading }) => (
+const Header = ({ user, logout, setShowAuth, setShowMenu, showMenu, detectUserLocation, locationLoading, setShowTripPlanner }) => (
   <header className="bg-white/10 backdrop-blur-xl border-b border-white/20 sticky top-0 z-50">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
       <div className="flex items-center justify-between">
@@ -500,6 +508,16 @@ const Header = ({ user, logout, setShowAuth, setShowMenu, showMenu, detectUserLo
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Trip Planner Button */}
+          <button 
+            onClick={() => setShowTripPlanner(true)}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold transition-all shadow-lg flex items-center gap-2"
+            title="AI Trip Planner"
+          >
+            <MapPin className="w-5 h-5" />
+            <span className="hidden md:inline">Plan Trip</span>
+          </button>
+
           {/* Location Button */}
           <button 
             onClick={detectUserLocation}
@@ -585,7 +603,7 @@ const SearchBar = ({ searchQuery, setSearchQuery, handleSearch, searchResults, s
       </div>
 
       {searchResults.length > 0 && (
-  <div className="absolute w-full mt-2 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl border border-white/20 max-h-96 overflow-y-auto z-[999]">
+         <div className="absolute w-full mt-2 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl border border-white/20 max-h-96 overflow-y-auto z-[999]">
           {searchResults.map((city, i) => (
             <button
               key={i}
@@ -989,8 +1007,3 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
-
-
-
-
-
