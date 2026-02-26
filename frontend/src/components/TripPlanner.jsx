@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Calendar, Luggage, TrendingUp, AlertTriangle, CheckCircle, X, Plus, Sparkles, Brain, Route, Package, Sun, Cloud, CloudRain, Wind, Thermometer, Users, Heart, Zap, Mountain, Coffee, Camera, Activity, Clock, Eye, Trash2 } from 'lucide-react';
 
+
 const TripPlanner = ({ onClose, user, StorageHelper }) => {
-  const [step, setStep] = useState(1); 
+  const [step, setStep] = useState(1); // 1: Cities, 2: Duration, 3: Preferences, 4: Results
   const [selectedCities, setSelectedCities] = useState([]);
-  const [tripDuration, setTripDuration] = useState(7); 
+  const [tripDuration, setTripDuration] = useState(7); // NEW: Trip duration in days (1-7)
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [preferences, setPreferences] = useState({
@@ -30,7 +31,7 @@ const TripPlanner = ({ onClose, user, StorageHelper }) => {
     }
   }, [user, StorageHelper]);
 
- // Save current trip
+  // Save current trip
   const saveCurrentTrip = () => {
     if (!user) {
       alert('Please sign in to save trips');
