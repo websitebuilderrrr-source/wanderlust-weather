@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
-import { MapPin, Calendar, Luggage, TrendingUp, AlertTriangle, CheckCircle, X, Plus, Sparkles, Brain, Route, Package, Sun, Cloud, CloudRain, Wind, Thermometer, Users, Heart, Zap, Mountain, Coffee, Camera, Activity, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MapPin, Calendar, Luggage, TrendingUp, AlertTriangle, CheckCircle, X, Plus, Sparkles, Brain, Route, Package, Sun, Cloud, CloudRain, Wind, Thermometer, Users, Heart, Zap, Mountain, Coffee, Camera, Activity, Clock, Eye, Trash2 } from 'lucide-react';
 
-
-
-const TripPlanner = ({ onClose }) => {
-  const [step, setStep] = useState(1); // 1: Cities, 2: Duration, 3: Preferences, 4: Results
+const TripPlanner = ({ onClose, user, StorageHelper }) => {
+  const [step, setStep] = useState(1); 
   const [selectedCities, setSelectedCities] = useState([]);
-  const [tripDuration, setTripDuration] = useState(7); // NEW: Trip duration in days (1-7)
+  const [tripDuration, setTripDuration] = useState(7); 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [preferences, setPreferences] = useState({
@@ -21,6 +19,56 @@ const TripPlanner = ({ onClose }) => {
   });
   const [tripPlan, setTripPlan] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [savedTrips, setSavedTrips] = useState([]);
+  const [showSavedTrips, setShowSavedTrips] = useState(false);
+  const [tripSaved, setTripSaved] = useState(false);
+
+  // Load saved trips on mount
+  useEffect(() => {
+    if (user) {
+      setSavedTrips(StorageHelper.getSavedTrips());
+    }
+  }, [user, StorageHelper]);
+
+  // Save current trip
+  const saveCurrentTrip = () => {
+    if (!user) {
+      alert('Please sign in to save trips');
+      return;
+    }
+
+    if (!tripPlan) {
+      alert('No trip plan to save');
+      return;
+    }
+
+    const savedTrip = StorageHelper.saveTrip(tripPlan);
+    if (savedTrip) {
+      setSavedTrips(StorageHelper.getSavedTrips());
+      setTripSaved(true);
+      setTimeout(() => setTripSaved(false), 3000);
+      alert('Trip saved successfully! 🎉');
+    }
+  };
+
+  // Load a saved trip
+  const loadSavedTrip = (tripId) => {
+    const trip = StorageHelper.getTripById(tripId);
+    if (trip) {
+      setTripPlan(trip.tripPlan);
+      setStep(4);
+      setShowSavedTrips(false);
+      setTripSaved(false);
+    }
+  };
+
+  // Delete a saved trip
+  const deleteSavedTrip = (tripId) => {
+    if (confirm('Delete this trip?')) {
+      StorageHelper.deleteTrip(tripId);
+      setSavedTrips(StorageHelper.getSavedTrips());
+    }
+  };
 
   // Search cities (using Open-Meteo)
   const searchCity = async (query) => {
@@ -501,9 +549,26 @@ const TripPlanner = ({ onClose }) => {
               <p className="text-sm text-cyan-200">Smart weather-based itinerary</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-            <X className="w-6 h-6 text-white" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Saved Trips Button */}
+            {user && (
+              <button
+                onClick={() => setShowSavedTrips(true)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                title="View saved trips"
+              >
+                <Luggage className="w-6 h-6 text-cyan-400" />
+                {savedTrips.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-pink-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {savedTrips.length}
+                  </span>
+                )}
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
         </div>
 
         {/* Progress Steps */}
@@ -709,41 +774,78 @@ const TripPlanner = ({ onClose }) => {
               Back
             </button>
 
-            {step < 4 ? (
-              <button
-                onClick={() => {
-                  if (step === 1 && selectedCities.length === 0) {
-                    alert('Please add at least one city');
-                    return;
-                  }
-                  if (step === 3) {
-                    generateTripPlan();
-                  } else {
-                    setStep(step + 1);
-                  }
-                }}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold transition-all shadow-lg flex items-center gap-2"
-              >
-                {step === 3 ? (
-                  <>
-                    <Brain className="w-5 h-5" />
-                    Generate AI Plan
-                  </>
-                ) : (
-                  'Next'
-                )}
-              </button>
-            ) : (
-              <button
-                onClick={onClose}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold transition-all"
-              >
-                Done
-              </button>
-            )}
+            <div className="flex gap-2">
+              {/* Save Trip Button (only show in results) */}
+              {step === 4 && tripPlan && user && (
+                <button
+                  onClick={saveCurrentTrip}
+                  className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+                    tripSaved
+                      ? 'bg-green-500/20 text-green-300 border-2 border-green-500'
+                      : 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border-2 border-purple-500/50'
+                  }`}
+                  disabled={tripSaved}
+                >
+                  {tripSaved ? (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Saved!
+                    </>
+                  ) : (
+                    <>
+                      <Heart className="w-5 h-5" />
+                      Save Trip
+                    </>
+                  )}
+                </button>
+              )}
+
+              {step < 4 ? (
+                <button
+                  onClick={() => {
+                    if (step === 1 && selectedCities.length === 0) {
+                      alert('Please add at least one city');
+                      return;
+                    }
+                    if (step === 3) {
+                      generateTripPlan();
+                    } else {
+                      setStep(step + 1);
+                    }
+                  }}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold transition-all shadow-lg flex items-center gap-2"
+                >
+                  {step === 3 ? (
+                    <>
+                      <Brain className="w-5 h-5" />
+                      Generate AI Plan
+                    </>
+                  ) : (
+                    'Next'
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={onClose}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold transition-all"
+                >
+                  Done
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Saved Trips Modal */}
+      {showSavedTrips && (
+        <SavedTripsModal
+          savedTrips={savedTrips}
+          onClose={() => setShowSavedTrips(false)}
+          onLoad={loadSavedTrip}
+          onDelete={deleteSavedTrip}
+        />
+      )}
     </div>
   );
 };
@@ -884,6 +986,94 @@ const TripResults = ({ plan }) => {
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+// Saved Trips Modal Component
+const SavedTripsModal = ({ savedTrips, onClose, onLoad, onDelete }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white/10 backdrop-blur-xl rounded-2xl max-w-4xl w-full border border-white/20 max-h-[80vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-white/20">
+          <div>
+            <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Luggage className="w-6 h-6" />
+              Saved Trips
+            </h3>
+            <p className="text-sm text-cyan-200">{savedTrips.length} saved trip{savedTrips.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {savedTrips.length === 0 ? (
+            <div className="text-center py-12">
+              <Luggage className="w-16 h-16 mx-auto text-cyan-300/50 mb-4" />
+              <p className="text-white text-lg mb-2">No saved trips yet</p>
+              <p className="text-cyan-200">Create a trip plan and save it for later!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {savedTrips.map((trip) => (
+                <div key={trip.id} className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/20 hover:bg-white/10 transition-all">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white text-lg mb-1">{trip.name}</h4>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <span className="text-xs px-2 py-1 rounded bg-cyan-500/20 text-cyan-300">
+                          {trip.duration} {trip.duration === 1 ? 'day' : 'days'}
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded bg-purple-500/20 text-purple-300">
+                          {trip.cities.length} {trip.cities.length === 1 ? 'city' : 'cities'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-cyan-200">
+                        Saved {new Date(trip.createdAt).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => onLoad(trip.id)}
+                        className="px-4 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-semibold transition-all flex items-center gap-2"
+                      >
+                        <Eye className="w-4 h-4" />
+                        View
+                      </button>
+                      <button
+                        onClick={() => onDelete(trip.id)}
+                        className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-white/20">
+          <button
+            onClick={onClose}
+            className="w-full px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold transition-all"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
