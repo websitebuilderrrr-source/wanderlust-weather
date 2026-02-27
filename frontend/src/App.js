@@ -23,6 +23,9 @@ const DynamicBackground = ({ weatherCondition, isNight }) => {
     if (condition.includes('cloud')) {
       return isNight ? '/gifs/cloudy-night.gif' : '/gifs/cloudy-day.gif';
     }
+    if (condition.includes('thunderstorm')) {
+      return isNight ? '/gifs/thunderstorm-night.gif' : '/gifs/thunderstorm-day.gif';
+    }
     return '/gifs/default.gif';
   };
 
@@ -600,7 +603,7 @@ const Header = ({ user, logout, setShowAuth, setShowMenu, showMenu, detectUserLo
               </button>
               
               {showMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl py-2 border border-white/20">
+                <div className="absolute right-0 mt-2 w-64 bg-slate-800/95 backdrop-blur-xl rounded-xl shadow-xl py-2 border border-white/20">
                   <div className="px-4 py-2 border-b border-white/10">
                     <p className="text-sm text-white">{user.email}</p>
                   </div>
@@ -1060,6 +1063,7 @@ const ActivitiesTab = ({ activityScores }) => (
 );
 
 export default App;
+
 
 
 
